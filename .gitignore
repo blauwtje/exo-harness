@@ -1,0 +1,5 @@
+docs/specs/
+node_modules/
+dist/
+.worktrees/
+.exo/

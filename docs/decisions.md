@@ -66,3 +66,17 @@ Each line: the choice, then the reason. User answers live in `request.md`; revie
 45. Open point 3, auto-accepting the recommended option: never; see 24.
 46. Open point 4, crew panel and card split: both kept because the user asked for them; crew panel edges only from real job, card and helper links; merge and split in phase 5.
 47. Open point 5, scouts reading other users' issues: owner-only by default, a setting widens it, untrusted text quoted (S12).
+
+## Phase 2 (lead, 2026-10-20)
+
+48. Phase-2 live check runs on a scratch repo with no remote, on Haiku, with a fully specified card: no external write, little spend, and a card that needs no question still reaches a brief. A project with no `origin` gets key `local/<folder name>` and its worktree starts at the local default branch.
+49. The 70% weekly ceiling covers every weekly window (`seven_day`, `seven_day_opus`, `seven_day_sonnet`); the 92% hard stop applies to the 5-hour window only: restates 18, 19 and 44 as one rule.
+50. Minimum exo version 0.136.0 (`minExoVersion` in `config/stages.json`): the version every probe ran against.
+51. Stall after 10 minutes with no event; `spec` wall timeout 60 minutes, replacing the 45 of 16 for `spec`: probe p9 showed a spec turn waiting on a backgrounded helper.
+52. Probe p6: `--allowedTools` entries skip `control_request`, except a listed Bash prefix whose path leaves the project (`blocked_path`), so the daemon answers those by code too: plugin-root paths allowed, other outside paths denied.
+53. Probe p9: a `result` does not mean idle; stdin stays open and the turn is classified only once background tasks are drained, because closing stdin early answered later permission asks with "Stream closed".
+54. Probe p9: `Agent` calls bring no `control_request`, so build dispatch is caught from the `tool_use` `subagent_type` (helper allowlist) or a `Skill` call naming `exo:build`, and the session is stopped.
+55. Probe p7: a killed `claude` leaves its tool processes running and a dead parent leaves the child running, so Stop, Stop all and restart reconcile kill the whole process group before any `--resume`.
+56. Probe p7: `--resume` needs an explicit user message and may repeat a side-effecting tool, so the resume message says the last tool may not have finished and to check its effect before repeating a writing command.
+57. Probe p9: a question title carries an `n/total` prefix (`**1/1 ...?**`); the parser reads it and the card shows it.
+58. Probe p8: `FORCE_PROMPT_CACHING_5M` stays unset (and scrubbed) so sessions get the 1-hour TTL; a reply after 10 idle minutes then reads the cached prefix instead of rewriting it.
