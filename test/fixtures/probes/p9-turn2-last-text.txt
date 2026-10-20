@@ -1,0 +1,1 @@
+The brief is written and passes the checker. I'm waiting on the open-points review before handing off.

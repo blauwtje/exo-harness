@@ -153,3 +153,94 @@ Verdict: an app can assign its own session id up front and resume later across p
 5. Slash commands in the prompt expand to skills with no echo; do not look for `Skill` tool_use.
 6. `result.total_cost_usd` is populated on a subscription (notional list price); do not show it as money spent.
 7. Hooks (`SessionStart`) add four `system/hook_*` events before `init`; the consumer must ignore unknown `type`/`subtype` values (also `thinking_tokens`).
+
+# Round 2 probes (harness review P1, P2, P4, P5)
+
+Same date and CLI (`claude` 2.1.305). 10 more live sessions (P1 2, P2a 3, P2b 2, P4 2, P5 1), all `env -u ANTHROPIC_API_KEY`, explicit `--permission-mode default`, `--max-turns` set, a deadline on every child (60-900 s in the Node driver; no GNU timeout), each in a fresh scratch git repo `/tmp/exo-harness-probe-<n>/`. Drivers: `/tmp/exo-harness-probe-scripts/` (`lib.mjs`, `p6.mjs`, `p6b.mjs`, `p7a.mjs`, `p7a2.mjs`, `p7b.mjs`, `p7b-parent.mjs`, `p8.mjs`, `p9.mjs`). Fixture names follow the order of the task: p6 = review P1, p7 = P2, p8 = P4, p9 = P5. Each has `.cmd.txt`, `.jsonl` (raw stdout) and, where a driver wrote to stdin, `.stdin.jsonl`. Secret scan (tokens, emails, org ids) of the new fixtures was clean; the only `@` strings are plugin ids (`exo@blauwtje`).
+
+## Probe p6 (review P1, M5): do `--allowedTools` entries skip `control_request`?
+
+Command (fixture `p6-allowedtools`): `--permission-mode default --permission-prompt-tool stdio --model haiku --max-turns 8 --allowedTools Read "Bash(ls:*)"`, prompt: Read README.md, run `ls`, Write x.txt. Driver denied every `control_request`.
+
+| tool_use | control_request? | `tool_result_meta.permission_decision` |
+|---|---|---|
+| Read README.md (inside cwd) | no | accept, source `config`, reason_type `rule` |
+| Bash `ls` | no | accept, `config`, `rule` |
+| Write x.txt | yes (`permission_suggestions: setMode acceptEdits`) | reject, `user_reject` |
+
+Contrast run (fixture `p6b-allowedtools-contrast`, same flags): Read `/etc/hosts` (outside cwd) ran with no request (rule `Read` has no path). Bash `ls -la /tmp` did produce a request, although `Bash(ls:*)` is listed: the target is outside the project, and the request carries `blocked_path: "/private/tmp"` and `permission_suggestions` (`addRules` for the exact command, and `Read //private/tmp/**` for the session). Bash `date` ran with no request (`decision accept, source config, reason_type subcommandResults`, a built-in read-only command, not on the allow list). `result.permission_denials` lists the denied tool with its input; `result.subtype` stays `success`.
+
+Verdict: yes, entries on `--allowedTools` skip the `control_request` under default + stdio. A prompt still appears for a listed Bash prefix when a path argument leaves the project (`blocked_path`), so the stage table cannot assume "prefix listed = never asks"; the daemon must answer those by code too. Some read-only commands (`date`) never ask, listed or not.
+
+## Probe p7 (review P2, M9): kill -9 mid-tool, and a dead parent
+
+### 7a: `kill -9` the claude process, then `--resume`
+
+Fixtures `p7a-killed`, `p7a-resumed`, `p7a-resumed-continue`. Haiku, `--allowedTools "Bash(sleep:*)"`, told to run `sleep 20`. Driver sent SIGKILL to claude 3 s after the Bash `tool_use` event (session `450eeff5-...`). The stream ends at `rate_limit_event`; exit `null SIGKILL`.
+
+- The tool's process tree is not killed: after the kill the `/bin/zsh -c ... eval 'sleep 20'` shell and `sleep 20` were reparented to pid 1 and kept running (still there 7 s later). A harness must kill the whole process group (or the descendants) itself.
+- `--resume <id>` with "what was the last command and its outcome? Do not run tools": result in 2.0 s, same `session_id`, answer "The last command was `sleep 20` through Bash, and its outcome is unknown because the session ended before the result was recorded." So it remembers; the unfinished tool_use is handled without an API error. Usage: `cache_creation_input_tokens` 463 (all `ephemeral_1h`), `cache_read_input_tokens` 18412.
+- Second resume with "Please continue where you left off.": it re-issued `Bash sleep 20` (a fresh run, not a resume of the old one), `system/task_started` at +5.7 s and `system/task_notification` at +22.7 s, final text "finished", result at 24.0 s. Usage: `cache_creation` 310, `cache_read` 37864.
+- Both resumes ran in the same cwd (needed for the session lookup, see probe 5).
+
+Verdict: kill -9 plus `--resume` works and the model remembers, but it does not continue the tool by itself; it needs a user message, and it repeats the call. A repeated side-effecting call is therefore possible after a crash, and the cache cost of a resume within the 1 h TTL is small (a few hundred creation tokens against a full read).
+
+### 7b: parent killed with SIGKILL while a stream-json child runs
+
+Parent = Node script (`p7b-parent.mjs`) that spawns claude (stdin pipe held open, prompt "run `sleep 15` via Bash"); the orchestrator SIGKILLs only the parent pid 2.5 s after the Bash `tool_use` line appeared, then polls `ps` every 0.5 s for 40 s. Fixtures `p7b-parent-kill-pipe` (child stdout is a pipe the parent read) and `p7b-parent-kill-file` (child stdout goes to a file fd).
+
+| variant | child state after parent SIGKILL | gone after | what the fixture shows |
+|---|---|---|---|
+| stdout pipe | kept running, ppid became 1 | 16.9 s | stream stops at `rate_limit_event`; the tool result and `result` were never written |
+| stdout file | kept running | 14.4 s | the full turn finished: `user` tool_result, `assistant` "finished", `result/success`, then exit |
+
+`sleep 15` survivors after the child exited: none (its shell ended with the tool). Timeline lines are in each `.cmd.txt`.
+
+Verdict: a dead parent does not stop the child. The child finishes the in-flight tool and exits around the end of its turn (file case: after the `result`, when it reads stdin EOF); with a pipe stdout it exits at the first write after the parent's read end is gone (EPIPE/SIGPIPE; the tool result never reached the transcript stream). Either way it is an orphan for the length of the running tool (here 12-15 s; with a real build, minutes). On daemon restart, reconcile by listing `claude` pids whose ppid is 1 (or by recording pids and process group ids in state), kill those, then `--resume`. Do not resume while the old child may still be writing to the same session.
+
+## Probe p8 (review P4, S2): cache after 10 minutes idle
+
+Fixtures `p8-5m` (`FORCE_PROMPT_CACHING_5M=1`) and `p8-default` (unset). Haiku, two parallel sessions with distinct ~2300-word lorem contexts, `--max-turns 3`. Turn 1 sent at t=0, stdin held open, turn 2 ("Reply with the single word ok again.") sent 600 s after turn 1's `result` (second `result` at +604.5 s / +604.9 s).
+
+| session | turn 1 cache_creation / read | turn 2 cache_creation | turn 2 cache_read |
+|---|---|---|---|
+| default (unset) | 24251 (all `ephemeral_1h`) / 0 | 172 (`ephemeral_1h`) | 24251 |
+| `FORCE_PROMPT_CACHING_5M=1` | 24391 (all `ephemeral_5m`) / 0 | 24470 (`ephemeral_5m`) | 0 |
+
+Verdict: confirmed. Unset gives the 1-hour TTL (`usage.cache_creation.ephemeral_1h_input_tokens`), and a reply after 10 minutes reads the whole 24k prefix from cache; with the 5-minute flag the prefix expired and the whole 24k was written again. `result.usage.cache_creation` splits the TTL, so the harness can see which TTL a session got. Note: even a one-word prompt carries a 24k prefix (system prompt, tools, plugins), so this matters for every idle gap above 5 minutes. Turn 1 of both sessions had `cache_read` 0, so the two sessions did not share a warm prefix.
+
+## Probe p9 (review P5, M1, M2): `/exo:spec` on Sonnet, "ok" replies, hand-off
+
+Fixture `p9-spec` (+ `p9-turn<N>-last-text.txt`, `p9-turn<N>-all-text.txt`, `p9-tool-uses.json`). Command in `.cmd.txt`: `--permission-mode default --permission-prompt-tool stdio --model sonnet --max-turns 12 --allowedTools Read Glob Grep "Bash(git:*)" "Bash(node:*)" --append-system-prompt "<workflow-driver line>"`; scratch repo `/tmp/exo-harness-probe-9` (package.json + index.js with `add`, one commit, branch `master`). Prompt `/exo:spec add a greeting feature` sent as a stream-json user message (the slash command expands locally here too). Driver: Write/Edit allowed only under `<cwd>/docs/`, everything else denied with a message; on a question-shaped last text, reply `ok`.
+
+Sequence:
+
+1. Turn 1 (10.3 s): the model read `question.md`, mapped the repo, read the two files, then asked. `result/success`, last text saved in `p9-turn1-last-text.txt`.
+2. Reply `ok`. Turn 2 (to 37.4 s): read the spec references, a compound Bash (`git remote -v; ...; cat .gitignore ...`) got a `control_request` and was denied (`Bash(git:*)` does not cover a compound command), `Write docs/specs/greeting.md` allowed, `plan-check.mjs` run by the model, an `Edit` allowed, then an `Agent` tool_use of `exo:find-open-points` (backgrounded, `task_started.is_backgrounded: true`). The turn's `result` arrived with that agent still running ("I'm waiting on the open-points review before handing off").
+3. The agent finished and its `system/task_notification` started a third turn with no user message. The driver had already closed stdin at the brief, so the model's two `Edit` calls got `control_request` answers of "Stream closed" and failed (`permission_denials` of that result lists both Edits). Final text asked nobody anything: "Next: build with `exo:build` on `docs/specs/greeting.md`. The caller starts it."
+
+Question text shape (turn 1, verbatim):
+
+```
+**1/1 What should the greeting feature do?**
+The code is a tiny library with one `add` function and a demo line.
+
+- **(A) Function**: `greet(name)` returns "Hello, name!" for other code.
+- **(B) Command line**: running the file with a name prints a greeting.
+- **(C) Both**: the function, plus a command line that uses it.
+
+Recommended: (A), because it is the smallest change that fits.
+```
+
+Parser notes: the bold title is `**<n>/<total> <question>?**` (a progress prefix, `1/1` here), then a free sentence, then `- **(X) Label**: text` lines, then `Recommended: (X), because ...`. Only one question turn occurred; the second reply `ok` produced the brief directly.
+
+Brief: `/private/tmp/exo-harness-probe-9/docs/specs/greeting.md` (written in the `Write` of turn 2). Build tried? No `Skill` tool_use at all in the stream, and no `Agent` tool_use with `build-task` or `run-unit`; the only Agent dispatch was `exo:find-open-points` (spec's own review step). The model named `exo:build` only as a next step for the caller. Hand-off with the workflow line therefore worked: no question, no build.
+
+`plan-check` (run after the session, from the main plugin checkout): `node /Users/thomash/Documents/Code/personal/plugins/exo/skills/spec/scripts/plan-check.mjs --plan docs/specs/greeting.md --root /private/tmp/exo-harness-probe-9 --loop --run` printed `plan-check: ok, 1 tasks, largest Task 1 (0 lines)` and `Task 1: about 100 tokens of task text and Files:`; exit 0.
+
+Other facts for the harness:
+
+- `result` does not mean idle. With a backgrounded Agent, `system/background_tasks_changed`, `task_started`, `task_progress`, `task_updated` and `task_notification` events follow, and a new turn (new `result`) starts on its own. Closing stdin after the first `result` breaks that turn (permissions answered "Stream closed"). Keep stdin open until background tasks are empty and no further turn follows.
+- The `Agent` dispatch gave no `control_request` (Agent is not permission-gated here), so a denial policy cannot stop a build dispatch: detect it by `tool_use` name/`subagent_type` and stop the session. Whether an Agent call from spec is a build dispatch is readable from `input.subagent_type`.
+- `num_turns` is per `result` here (7, 12, 3), and `--max-turns 12` was reached exactly in turn 2 yet reported `success` (no `error_max_turns`); the third turn then started anyway, so the limit looks per user message, not per process.
+- Question turn used plain text (no `AskUserQuestion` call), consistent with `question.md`.

@@ -1,0 +1,3 @@
+cd /private/tmp/exo-harness-probe-6b && env -u ANTHROPIC_API_KEY claude -p --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio --model haiku --max-turns 8 --allowedTools Read "Bash(ls:*)"
+# control mode: deny every control_request (message "probe deny: write not allowed")
+# exit 0 

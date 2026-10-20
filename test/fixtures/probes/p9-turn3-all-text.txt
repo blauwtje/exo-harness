@@ -1,0 +1,10 @@
+1. [assume] Empty-string or whitespace name (`greet('')`) → treat only `undefined` as missing, so `''` gives `Hello, !`. The default parameter `name = 'world'` is the cheapest option and is easy to change. (/private/tmp/exo-harness-probe-9/index.js:2)
+2. [assume] `null` or non-string name → no special handling, plain template interpolation, since the brief names none. (/private/tmp/exo-harness-probe-9/docs/specs/greeting.md:5)
+3. [code] Branch `greeting` versus the current branch `master` → create `greeting` from `master`. The git status shows `master` as current and `main` as the PR base, and the brief's land step is local. (/private/tmp/exo-harness-probe-9/docs/specs/greeting.md:22)
+4. [code] The land gate `npm test` only loads `index.js` and does not run the success criterion → run the criterion's `node -e` command as well. (/private/tmp/exo-harness-probe-9/package.json:6)
+-----
+The brief is at `docs/specs/greeting.md` and passes the checker, but two assumption lines are missing from it. The edit that adds them failed twice with "Stream closed". I did not rerun the checker after the review.
+
+- **Plan:** one task adds `greet(name)` to `index.js`. It returns `Hello, <name>!`, or `Hello, world!` with no name. Land is `local`, because the repo has no `origin`.
+- **Missing lines:** the review found no question for you. It only suggested two assumptions to record. `greet('')` would return `Hello, !`, and `null` or non-string names get no special handling.
+- **Next:** build with `exo:build` on `docs/specs/greeting.md`. The caller starts it.

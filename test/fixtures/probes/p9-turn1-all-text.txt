@@ -1,0 +1,8 @@
+**1/1 What should the greeting feature do?**
+The code is a tiny library with one `add` function and a demo line.
+
+- **(A) Function**: `greet(name)` returns "Hello, name!" for other code.
+- **(B) Command line**: running the file with a name prints a greeting.
+- **(C) Both**: the function, plus a command line that uses it.
+
+Recommended: (A), because it is the smallest change that fits.

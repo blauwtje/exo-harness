@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Do these in order: 1. Read /etc/hosts with the Read tool (outside the project). 2. Run `ls -la /tmp` with the Bash tool. 3. Run `date` with the Bash tool. Then say done."}}
+{"type":"control_response","response":{"subtype":"success","request_id":"ff834775-6e3e-42f1-a791-de1e40f820a5","response":{"behavior":"deny","message":"probe deny: write not allowed"}}}

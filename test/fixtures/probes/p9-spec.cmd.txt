@@ -1,0 +1,3 @@
+cd /private/tmp/exo-harness-probe-9 && env -u ANTHROPIC_API_KEY claude -p --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio --model sonnet --max-turns 12 --allowedTools Read Glob Grep "Bash(git:*)" "Bash(node:*)" --append-system-prompt "This session is driven by a workflow (exo-harness): spec is invoked by a workflow, so at hand-off ask nothing and return to the caller; the harness queues the build itself so it stays inside the user's limits."
+# driver: allow Write/Edit only under <cwd>/docs/, deny others; on question-shaped last text reply "ok" (max 4 replies)
+# exit 0 

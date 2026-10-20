@@ -1,0 +1,9 @@
+# parent: node p7b-parent.mjs pipe (spawn claude -p --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio --model haiku --max-turns 6 --allowedTools "Bash(sleep:*)"; stdin pipe held open by parent; stdout pipe read by parent)
+# prompt: run `sleep 15` via Bash
+# timeline:
+# +4.8s Bash tool_use seen + 2.5s. parent=63735 child=63736; descendants: 63736 63735 /Users/thomash/.local/bin/claude -p --input-format stream-json --output-format stream-json --verbose --permi;64257 63736 /bin/zsh -c source /Users/thomash/.claude/shell-snapshots/snapshot-zsh-1792532250025-rtjnr8.sh 2>/dev/null |;64258 64257 sleep 15;
+# +4.8s SIGKILL parent
+# +21.7s child 63736 GONE 16.9s after parent SIGKILL
+# +21.7s sleep 15 survivors: none
+# +21.7s last events in fixture: system/init, assistant, rate_limit_event
+# +21.7s stderr: ""

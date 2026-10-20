@@ -1,0 +1,3 @@
+cd /private/tmp/exo-harness-probe-8b && env -u ANTHROPIC_API_KEY claude -p --input-format stream-json --output-format stream-json --verbose --permission-mode default --model haiku --max-turns 3
+# stdin: turn 1 = ~3k-token lorem context + "Reply with the single word ok."; turn 2 sent 600s after turn 1 result: "Reply with the single word ok again."
+# exit 0 

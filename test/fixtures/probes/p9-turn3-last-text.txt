@@ -1,0 +1,5 @@
+The brief is at `docs/specs/greeting.md` and passes the checker, but two assumption lines are missing from it. The edit that adds them failed twice with "Stream closed". I did not rerun the checker after the review.
+
+- **Plan:** one task adds `greet(name)` to `index.js`. It returns `Hello, <name>!`, or `Hello, world!` with no name. Land is `local`, because the repo has no `origin`.
+- **Missing lines:** the review found no question for you. It only suggested two assumptions to record. `greet('')` would return `Hello, !`, and `null` or non-string names get no special handling.
+- **Next:** build with `exo:build` on `docs/specs/greeting.md`. The caller starts it.

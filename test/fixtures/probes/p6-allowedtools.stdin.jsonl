@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Do these three steps in order: 1. Read README.md with the Read tool. 2. Run `ls` with the Bash tool. 3. Create a file x.txt containing hi with the Write tool. Then say done."}}
+{"type":"control_response","response":{"subtype":"success","request_id":"aa723289-4904-4a1d-8eba-32ad12bc9372","response":{"behavior":"deny","message":"probe deny: write not allowed"}}}

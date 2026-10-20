@@ -1,0 +1,3 @@
+Fixing a checker flag: the brief can't name the default branch.
+-----
+The brief is written and passes the checker. I'm waiting on the open-points review before handing off.
