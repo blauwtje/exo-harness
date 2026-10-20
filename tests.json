@@ -1,0 +1,737 @@
+[
+  {
+    "id": "F-2-01",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Daemon on 127.0.0.1 with Host and Origin checks and a per-launch token; HTTP JSON plus SSE.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-02",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Data dir (S14) with EXO_HARNESS_DATA override; JSON state by tmp plus rename; per-job events.jsonl.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-03",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Data model: project keyed by nameWithOwner plus local path (S10), cards, jobs; one project added by local path.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-04",
+    "phase": 2,
+    "kind": "feature",
+    "title": "gh wrapper with allowlist and the source check in npm test (M6).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-05",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Fake claude replaying fixtures; --fixtures is the only mode allowed under CLAUDECODE.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-06",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Auth guard: claude auth status --json before the first spawn per launch.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-07",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Env scrub (M4 list) and one-time API key notice.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-08",
+    "phase": 2,
+    "kind": "feature",
+    "title": "init invariants (M4) and version stamps per job (S4).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-09",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Stream parser: known types, unknown passthrough, malformed lines logged.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-10",
+    "phase": 2,
+    "kind": "feature",
+    "title": "config/stages.json with the spec entry; explicit --permission-mode; stable system prompt, --exclude-dynamic-system-prompt-sections (S2).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-11",
+    "phase": 2,
+    "kind": "feature",
+    "title": "control_request answered by code from the spec permission table; other asks become allow-once or deny cards (M5).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-12",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Shape: detached worktree at origin/<default>, .git/info/exclude, long-lived /exo:spec session (M1).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-13",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Turn classifier and question-card parser for exo's text question shape (question.md), with real and edge-case fixtures (two questions, 1/3 prefix, non-English, no recommendation line); letter buttons, OK, free-text reply (M1).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-14",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Shape done-state: new brief file plus plan-check.mjs --plan <brief> --root <worktree> --loop --run exit 0; workflow-caller framing; build dispatch stops the session; health requires specs = docs or both (M2).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-15",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Live timeline over SSE; raw transcript one click away.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-16",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Stop and Stop all: SIGTERM the process group, SIGKILL after a grace period.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-17",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Restart reconcile with pid, start time and process group (M9), using probe P2 fixtures.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-18",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Outcome enum, failure inbox list, limit-stream capture to test/fixtures/inbox/ (S5).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-19",
+    "phase": 2,
+    "kind": "feature",
+    "title": "rate_limit_event parsing including overage fields (M7 parse) and cache token fields (S2).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-20",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Stall detection, wall timeout, caffeinate (S13).",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-21",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Health: claude present, auth, exo loaded and at least the minimum version, tree state.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-22",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Design directions: 2-3 static screenshots of the deck screen; the user picks one before any UI is built.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-23",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Board (one project, manual cards) and job view in the picked direction, React 19 plus Vite.",
+    "status": "fail"
+  },
+  {
+    "id": "F-2-24",
+    "phase": 2,
+    "kind": "feature",
+    "title": "Three wrapper eval cases (S3): vague feature asks; specified one-liner does not ask; ok to hand-off starts no build.",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-01",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Probe P3 first: exo run from a linked worktree with Land: local and Land: none, scratch repo with a local bare origin; result in facts.md (M3).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-02",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Approve brief starts exo run --detach <plan> in the card's worktree with --max-run-usd and --max-budget-usd; env scrub adds CLAUDECODE and CLAUDE_CODE_*; exo run config provider check (M4, X2).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-03",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Branch-name collision check at Approve (S15).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-04",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Worktree setup step from the lockfile, per-project override, .env* copy per exo env setting (S7).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-05",
+    "phase": 3,
+    "kind": "feature",
+    "title": "state.json polled at 1 s with pid liveness; lock and dirty-tree refusals shown; job queued behind the lock.",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-06",
+    "phase": 3,
+    "kind": "feature",
+    "title": "exo run timeline from iter-*.log with the same parser; init check per log (S6, M4).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-07",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Parked run becomes a gate card with diff stat, per-file diff, report.md head, denied.txt; Approve calls exo approve <id> (S9).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-08",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Final phases: bug card with Reason: and resume, retry or discard; dead pid with non-final phase gets one --resume (X1).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-09",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Archive run evidence on final phase (M10); removal only through remove-worktree.mjs --kept.",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-10",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Find cause stage: long-lived session shape (M1) and its permission table (M5).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-11",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Conflict route: parked job lists conflicting files, offers Find cause or manual.",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-12",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Main checkout fast-forward refusal shown as a card (M3).",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-13",
+    "phase": 3,
+    "kind": "feature",
+    "title": "exo repo exception: runs from its main checkout with Land: local.",
+    "status": "fail"
+  },
+  {
+    "id": "F-3-14",
+    "phase": 3,
+    "kind": "feature",
+    "title": "Failure inbox and outcomes cover exo runs (S5); card summary from report.md head and last message (X4).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-01",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Full stage table in config/stages.json; routing per stage.",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-02",
+    "phase": 4,
+    "kind": "feature",
+    "title": "User settings file and Settings screen: ceilings, hard stop, concurrency, landing default and per-project override, scouts, overage toggle.",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-03",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Usage from three sources, freshest wins, every rateLimitType tracked (S1).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-04",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Admission on projected cost: per-stage utilization ledger, p75 projection under the ceiling (S1).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-05",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Hard stop at the task boundary for exo runs (S1).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-06",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Overage guard enforced, explicit toggle as a gate (M7).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-07",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Queue: visible, reorderable FIFO, per-project priority, concurrency cap.",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-08",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Limit hit in a -p job: queue paused, reset recorded, resume after the reset.",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-09",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Auto-resume only for limit-only gates after resetsAt plus jitter (M8).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-10",
+    "phase": 4,
+    "kind": "feature",
+    "title": "-p retries on infrastructure failures only, at most twice, failing line recorded (X1).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-11",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Budget dial writes --scope local, local file checked git-ignored (S11).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-12",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Budget raise gate.",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-13",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Token ledger per job with cache fields and the idle cache-write flag; costUsd labeled an estimate (S2).",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-14",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Offline detection: queue holds, UI usable, resumes when back.",
+    "status": "fail"
+  },
+  {
+    "id": "F-4-15",
+    "phase": 4,
+    "kind": "feature",
+    "title": "Limit gauges with resume time; Stop all pauses the queue.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-01",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Project picker: own and org repos from gh, cached, archived and forks hidden by default (S10).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-02",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Projects folder setting; local mapping by normalized origin URL; no disk crawl.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-03",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Add project by partial clone or existing clone.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-04",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Remove project; delete local clone after the M11 checks, to the Trash.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-05",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Deck overview: Needs-you first, project rail, running jobs, queue, gauges.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-06",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Health adds gh auth status, archived on GitHub, default branch, specs and ship settings (S10).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-07",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Board restructuring: drag, reorder, retag, merge and split, one gesture each.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-08",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Lanes derived from git and GitHub; PR checks, review and mergeability for open deck PRs (S8).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-09",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Ship stage: session shape (M1), permission table with push and gh pr only (M5), landing setting per project.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-10",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Verify action for branches built outside exo run (X3).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-11",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Worktree GC when Done and PR merged, after archive (S7, M10).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-12",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Manual scouts on added projects; untrusted text boundary, owner-only issues by default (S12).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-13",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Scout triage eval: 20+ hand-labeled cases, code grader, 3 runs per model, spread reported; cheapest passing model.",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-14",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Scheduled scouts, offered only after the triage eval passes, each with a turn and spend cap (X7).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-15",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Crew panel: running jobs and helpers linked to cards by React Flow edges from real links only (X8 kept).",
+    "status": "fail"
+  },
+  {
+    "id": "F-5-16",
+    "phase": 5,
+    "kind": "feature",
+    "title": "Missing project: marked missing, relocate flow.",
+    "status": "fail"
+  },
+  {
+    "id": "F-6-01",
+    "phase": 6,
+    "kind": "feature",
+    "title": "Polish against the picked direction: damped motion without overshoot, prefers-reduced-motion, colorblind-safe status hues.",
+    "status": "fail"
+  },
+  {
+    "id": "F-6-02",
+    "phase": 6,
+    "kind": "feature",
+    "title": "Design review: Playwright screenshots of each screen at 1440 and 1024, empty, busy and error states; fresh critique helper on hierarchy (Needs-you in under 2 s), WCAG AA contrast, alignment, motion, consistency; fixes; screenshots in docs/design/.",
+    "status": "fail"
+  },
+  {
+    "id": "F-6-03",
+    "phase": 6,
+    "kind": "feature",
+    "title": "Huge tool output: stored on disk, trimmed view, \"load full\".",
+    "status": "fail"
+  },
+  {
+    "id": "F-6-04",
+    "phase": 6,
+    "kind": "feature",
+    "title": "Metrics view (X6) with raw transcripts one click from every number.",
+    "status": "fail"
+  },
+  {
+    "id": "F-6-05",
+    "phase": 6,
+    "kind": "feature",
+    "title": "Version banner and the probe suite diffing event types and keys against test/fixtures/probes/ (S4).",
+    "status": "fail"
+  },
+  {
+    "id": "F-6-06",
+    "phase": 6,
+    "kind": "feature",
+    "title": "Full wrapper eval set: 8 cases, 3 runs each, pass counts per case (S3).",
+    "status": "fail"
+  },
+  {
+    "id": "F-7-01",
+    "phase": 7,
+    "kind": "feature",
+    "title": "Tauri 2 window around the UI; logic stays in the Node daemon.",
+    "status": "fail"
+  },
+  {
+    "id": "F-7-02",
+    "phase": 7,
+    "kind": "feature",
+    "title": "Login item (launchd) starting the daemon outside Claude Code.",
+    "status": "fail"
+  },
+  {
+    "id": "S-01",
+    "phase": 2,
+    "kind": "situation",
+    "title": "claude missing, logged out, or authMethod not claude.ai: Blocks spawning, shows the exact fix command",
+    "status": "fail"
+  },
+  {
+    "id": "S-02",
+    "phase": 2,
+    "kind": "situation",
+    "title": "ANTHROPIC_API_KEY set in the shell: Strips it (and M4's list) from every child including exo run, shows a one-time notice",
+    "status": "fail"
+  },
+  {
+    "id": "S-03",
+    "phase": 4,
+    "kind": "situation",
+    "title": "Limit hit mid-job: Pauses the queue, records the reset time, resumes on its own after the reset",
+    "status": "fail"
+  },
+  {
+    "id": "S-04",
+    "phase": 2,
+    "kind": "situation",
+    "title": "App or daemon crash, Mac sleeps or reboots: Reconciles by pid plus start time, resumes or marks each job, loses no card, leaves no orphan",
+    "status": "fail"
+  },
+  {
+    "id": "S-05",
+    "phase": 3,
+    "kind": "situation",
+    "title": "exo run parked / stopped / crashed / refused: Shows report.md and the reason; parked becomes a gate card, the others a bug card with resume, retry or discard",
+    "status": "fail"
+  },
+  {
+    "id": "S-06",
+    "phase": 3,
+    "kind": "situation",
+    "title": "Merge or rebase conflict: Parks the job with the conflicting files, offers a find-cause or manual route",
+    "status": "fail"
+  },
+  {
+    "id": "S-07",
+    "phase": 3,
+    "kind": "situation",
+    "title": "Dirty tree or another run holds the lock: Shows exo's refusal text, queues the job behind the lock",
+    "status": "fail"
+  },
+  {
+    "id": "S-08",
+    "phase": 4,
+    "kind": "situation",
+    "title": "Offline: Queues jobs, keeps the UI fully usable, resumes when back online",
+    "status": "fail"
+  },
+  {
+    "id": "S-09",
+    "phase": 4,
+    "kind": "situation",
+    "title": "Job loops (same failing line twice, no new commits): exo run: exo's no-progress or attempt-cap stop becomes a bug card with its Reason:; -p: stops at the second identical failing line, bug card",
+    "status": "fail"
+  },
+  {
+    "id": "S-10",
+    "phase": 5,
+    "kind": "situation",
+    "title": "Project folder moved or deleted: Marks the project missing, asks the user to relocate it",
+    "status": "fail"
+  },
+  {
+    "id": "S-11",
+    "phase": 2,
+    "kind": "situation",
+    "title": "Unknown or malformed stream event: Logs it raw, keeps the job alive",
+    "status": "fail"
+  },
+  {
+    "id": "S-12",
+    "phase": 2,
+    "kind": "situation",
+    "title": "exo not loaded or too old: Shows how to install or update it",
+    "status": "fail"
+  },
+  {
+    "id": "S-13",
+    "phase": 6,
+    "kind": "situation",
+    "title": "Huge tool output: Stores it on disk, shows a trimmed view with \"load full\"",
+    "status": "fail"
+  },
+  {
+    "id": "S-14",
+    "phase": 2,
+    "kind": "situation",
+    "title": "init invariant mismatch (M4): Kills the process group before the first tool result is accepted, Needs-you card naming the field",
+    "status": "fail"
+  },
+  {
+    "id": "S-15",
+    "phase": 4,
+    "kind": "situation",
+    "title": "Overage active (M7): Admits no new job, drains running ones, gauge shows overage, waits for the explicit toggle",
+    "status": "fail"
+  },
+  {
+    "id": "S-16",
+    "phase": 4,
+    "kind": "situation",
+    "title": "Mixed gates: limit gate plus another open gate (M8): No auto-approve; gate card listing every open gate",
+    "status": "fail"
+  },
+  {
+    "id": "S-17",
+    "phase": 3,
+    "kind": "situation",
+    "title": "Main checkout fast-forward refused (M3): Shows exo's refusal and the main checkout's local edits as a card; touches nothing there",
+    "status": "fail"
+  },
+  {
+    "id": "S-18",
+    "phase": 3,
+    "kind": "situation",
+    "title": "Worktree missing deps (S7): Runs the setup step before the job; a setup failure is a setup card, not a code bug card",
+    "status": "fail"
+  },
+  {
+    "id": "S-19",
+    "phase": 3,
+    "kind": "situation",
+    "title": "Branch-name collision (S15): Caught at Approve, shown on the card, not queued",
+    "status": "fail"
+  },
+  {
+    "id": "S-20",
+    "phase": 2,
+    "kind": "situation",
+    "title": "Stalled session (S13): Marks stalled after N quiet minutes, then the wall timeout kills the group, outcome timeout",
+    "status": "fail"
+  },
+  {
+    "id": "S-21",
+    "phase": 5,
+    "kind": "situation",
+    "title": "Clone delete with local-only work (M11): Lists uncommitted, ignored, stashed, unpushed, worktrees and live runs; approval; folder to Trash",
+    "status": "fail"
+  },
+  {
+    "id": "C-01",
+    "phase": 2,
+    "kind": "criterion",
+    "title": "With the API key set in the shell, no child process sees it, and claude auth status gates every launch (test plus one live check).",
+    "status": "fail"
+  },
+  {
+    "id": "C-02",
+    "phase": 6,
+    "kind": "criterion",
+    "title": "Every Situations row passes its fixture test; tests.json shows them all passing.",
+    "status": "fail"
+  },
+  {
+    "id": "C-03",
+    "phase": 2,
+    "kind": "criterion",
+    "title": "Killing the daemon mid-job and restarting it resumes or correctly marks every job, with no lost card or orphaned process.",
+    "status": "fail"
+  },
+  {
+    "id": "C-04",
+    "phase": 3,
+    "kind": "criterion",
+    "title": "From card to approved brief to a landed exo run takes no more than 3 clicks plus approvals.",
+    "status": "fail"
+  },
+  {
+    "id": "C-05",
+    "phase": 4,
+    "kind": "criterion",
+    "title": "The queue never starts a job past the budget ceiling (fixture test with a simulated limit state).",
+    "status": "fail"
+  },
+  {
+    "id": "C-06",
+    "phase": 6,
+    "kind": "criterion",
+    "title": "The design review checklist passes on all screens at both widths, and the screenshots are saved.",
+    "status": "fail"
+  },
+  {
+    "id": "C-07",
+    "phase": 2,
+    "kind": "criterion",
+    "title": "docs/progress.md lets a fresh session continue without asking the user anything.",
+    "status": "fail"
+  }
+]
