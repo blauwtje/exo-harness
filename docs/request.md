@@ -16,3 +16,7 @@ The user's original request (2026-10-20) is kept verbatim in `request-original.m
 Projects are not a fixed list of four. The harness sees **all of the user's GitHub repos** and lets them add, remove and work on any project with ease. It must feel very modern with git.
 
 Facts: `gh` 2.95.0 is logged in as `blauwtje` (keyring), 51 repos visible via `gh repo list`. Token scopes include `delete_repo`, so the harness must never call a repo-deleting API; "remove project" means remove it from the harness (and, after an unmerged-work check and approval, its local clone).
+
+## Landing (answered 2026-10-20)
+
+How a finished build reaches the main branch is a **global setting with a per-project override** (pull request or local merge). Global default: pull request, since runs work in their own worktree. Local merge from a run worktree parks in exo (`land-run.mjs`, per `review-senior-ai.md` MUST 3); probe that before offering it as working.
