@@ -1,0 +1,2 @@
+cd /tmp/exo-deck-probe-6 && env -u ANTHROPIC_API_KEY claude -p Use the AskUserQuestion tool to ask me whether I prefer A or B. Do nothing else. --output-format stream-json --verbose --model haiku --max-turns 2
+exit 0

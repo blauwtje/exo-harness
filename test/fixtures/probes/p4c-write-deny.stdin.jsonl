@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Create a file named x.txt containing hi using the Write tool."}}
+{"type":"control_response","response":{"subtype":"success","request_id":"c7588fc9-453f-4a95-b18a-c90a6f85a5fd","response":{"behavior":"deny","message":"probe deny"}}}

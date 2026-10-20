@@ -1,0 +1,94 @@
+# Strings found in the claude 2.1.305 binary (Mach-O, bun-bundled JS), via `strings -n 8`.
+# INFERRED FROM BUNDLE, NOT OBSERVED LIVE. Snippets trimmed; embedded zod schema + descriptions of the SDK message types.
+
+## rate_limit_event message schema
+aF=f(()=>u({type:T("rate_limit_event"),rate_limit_info:Xjr(),uuid:p(),session_id:o()}).describe("Rate limit event emitted when rate limit info changes.")),yy=f(
+()=>u({tool_name:o(),tool_use_id:o(),tool_input:fe(o(),oe())})),iF=f((
+
+## rate_limit_info schema (Xjr): status, resetsAt, rateLimitType, unifiedWindows
+Xjr=f(()=>u({status:F(["allowed","allowed_warning","rejected"]),resetsAt:E().int().optional(),rateLimitType:F(["five_hour","seven_day","seven_day_opus","seven_d
+ay_sonnet","seven_day_overage_included","overage"]).optional(),utilization:E().optional(),unifiedWindows:u({five_hour:u({utilization:E(),resetsAt:E().int()}).op
+tional(),seven_day:u({utilization:E(),resetsAt:E().int()}).optional(),seven_day_overage_included:u({utilization:E(),resetsAt:E().int()}).optional()}).optional()
+.describe("@internal Per-window usage for the session (5-hour), weekly (7-day), and overage-included weekly (per-model bucket; present only for accounts whose r
+esponses carry that window) subscription rate-limit windows, as read from the anthropic-ratelimit-unified-* response headers. utilization is the fraction of the
+ window used (usually 0-1, same scale as the top-level utilization field; values above 1 occur when usage legitimately runs past a window's cap, e.g. lower-prio
+rity episodes past the 5-hour limit); resetsAt is unix epoch seconds. Unlike the top-level status/utilization fields, which describe the currently limiting wind
+ow, both windows are tracked on every observation, and events are emitted when a window's rounded percentage or reset time moves, not only on status transitions
+. Windows absent from the account state are absent here. Absent until the first response carrying these headers is observed, and always absent for API-key, Bedr
+ock, and Vertex sessions, whose responses do not carry them.
+
+## overage fields tail of schema
+overageStatus:F(["allowed","allowed_warning","rejected"]).optional(),overageResetsAt:E().int().optional(),overageDisabledReason:F(["overage_not_provisioned","or
+g_level_disabled","org_level_disabled_until","out_of_credits","seat_tier_level_disabled","member_level_disabled","seat_tier_zero_credit_limit","group_zero_credi
+t_limit","member_zero_credit_limit","org_service_level_disabled","no_limits_configured","fetch_error","unknown"]).optional(),isUsingOverage:M().optional(),overa
+geInUse:M().optional(),overageEnabled:M().optional(),surpassedThreshold:E().optional(),rateLimitGraceActive:M().optional().describe("@internal Usage-limit grace
+ signal. Follows the latest served main-loop or subagent response: set when it reports grace-zone utilization > 0 (the server reports that only to a request tha
+t sent `anthropic-usage-limit: extended`, tengu_lantern_spool), cleared when a response the limiter 
+
+## assistant message api_error fields
+is_api_error_message:M().optional().describe("@internal True when this assistant message wraps an API error (from internal AssistantMessage.isApiErrorMessage)."
+),api_error_status:E().int().optional().describe("@internal HTTP status code of the API error when is_api_error_message is true."),api_error:F(["max_output_toke
+ns","dlp_request_denied","claude_code_version_too_old","safety_monitor_blocked","effort_requires_thinking","advisor_incompatible","tool_history_mismatch","autoc
+ompact_thrashing","pdf_too_large","pdf_password_protected","media_removed","no_response","tls_untrusted_ca","gateway_content_type","provider_credentials","gatew
+ay_signin_required","gateway_session_expired","api_key_auth_
+
+## assistant message error enum (SDK assistant error)
+go=f(()=>F(["authentication_failed","oauth_org_not_allowed","account_on_hold","verification_required","billing_error","rate_limit","overloaded","invalid_request
+","model_not_found","server_error","unknown","max_output_tokens","cloud_credential_error"])),eF=f(()=>Ue([T("compacting"),T("requesting"),Hf()])),Ty=f(()=>u({ur
+i:o(),name
+
+## usage_limit_reached api_error kind doc
+usage_limit_reached: the request was refused by the account's own usage limit, a plan limit (session, weekly or per-model) or a spend cap on usage credits; api_
+error_params.rate_limit_info says which and when it resets. The other refusals that share error rate_limit never carry it: an organization policy that turned th
+e service off (no limit was reached, and no reset clears it), a temporary server throttle, a capacity switch-off, an entitlement refusal shown in the server's o
+wn words, or a 429 on an API key or a third-party cloud provider."),api_error_params:u({effort:o().optional(),provider:F(["bedrock","anthropicAws","mantle","ant
+hropicGoogleCloud","vertex","foundry","gateway"]).optional()
+
+## rate_limit_info inside api_error_params doc
+rate_limit_info (usage_limit_reached): what the refused request's own response said about the limit, in the shape rate_limit_event carries. It is read from the 
+same values as the message text, so its status, limit and reset are the text's: status is rejected and isUsingOverage false, rateLimitType names the limit, rese
+tsAt is when it resets, and overageStatus, overageResetsAt, overageDisabledReason and limitScope say whose spend cap it is (the person's own cap arrives as org_
+level_disabled_until, as on rate_limit_event); no other member is sent. It is that refusal's record and is never updated, so compare resetsAt with the clock bef
+ore calling the limit current."),api_error_code:o().optional().describe("@internal The server's error.details.error_code for this API error, copied through when
+ it is an identifier (^[a-z][a-z0-9_]{0,63}$) and dropped otherwise. Carries server gate codes this build has no api_error value for, so a host can key on a new
+ gate without a Claude Code release. Absent when the response carried no code."),api_error_origin:F(["first_party"]).optional().catch(void 0
+
+## result message fields
+is_error:M(),api_error_status:E().int().nullable().optional(),api_error_code:o().optional().describe("@internal The api_error_code of the API error that ended t
+he turn (see SDKAssistantMessage.api_error_code): the server's error.details.error_code when it is an identifier. Absent when the turn did n
+
+## result error subtype strings
+error_max_budget_usd⏎error_max_turns⏎Reached maximum number of turns (⏎tool_deferred⏎tengu_structured_output_refusal_dropped⏎duration_api_ms⏎total_cost_usd⏎perm
+ission_denials⏎subagent_stats⏎safety_sto
+
+## blocking_limit / terminal reasons
+aborted_streaming⏎aborted_tools⏎background_requested⏎blocking_limit⏎malformed_tool_use_exhausted⏎prompt_too_long⏎rapid_refill_breaker⏎stop_hook_prevented⏎CLAUDE
+
+
+## server contract note (gateway docs): client composes the limit line
+Leave \`representative-claim\` and \`overage-status\` off the 429. With them the⏎client composes its own "You've hit your limit" line and drops your message;⏎wi
+thout them it prints \`error.message\` as-is (older clients too, behind a⏎generic "API Error" prefix), so put the period, the reset time, and what the⏎user shou
+ld do next in that one sentence. \`retry-after\` is seconds until the⏎reset; \`x-should-retry: false\` keeps the SDK from retrying into the block. If⏎you can't 
+read your counter and choose to fail closed, send the 429 with⏎\`x-should-retry: false\`,⏎\`anthropic-ratelimit-unified-
+
+## PEr(): how CLI builds rate_limit_info from internal limits
+function PEr(e,{includeOverageInUse:n=!0,unifiedWindows:r,overageEnabled:s,usageCreditOffer:h}={}){if(!e)return;return{status:e.status,...e.resetsAt!==void 0&&{
+resetsAt:e.resetsAt},...e.rateLimitType!==void 0&&{rateLimitType:e.rateLimitType},...e.utilization!==void 0&&{utilization:e.utilization},...e.overageStatus!==vo
+id 0&&{overageStatus:e.overageStatus},...e.overageResetsAt!==void 0&&{overageResetsAt:e.overageResetsAt},...e.overageDisabledReason!==void 0&&{overageDisabledRe
+ason:e.overageDisabledReason==="org_spend_cap_reached"?"org_level_disabled_until":e.overageDisabledReason},...e.overageScope!==void 0&&{limitScope:e.overageScop
+e},...e.isUsingOverage!==void 0&&{isUsingOverage:e.isUsingOv
+
+## headers: anthropic-ratelimit-unified-*
+
+
+## response headers the CLI reads (source of unifiedWindows / rate_limit_info)
+anthropic-ratelimit-unified-5h-reset anthropic-ratelimit-unified-5h-surpassed-threshold anthropic-ratelimit-unified-5h-utilization anthropic-ratelimit
+-unified-7d-reset anthropic-ratelimit-unified-7d-surpassed-threshold anthropic-ratelimit-unified-7d-utilization anthropic-ratelimit-unified-fallback a
+nthropic-ratelimit-unified-grace-5h-utilization anthropic-ratelimit-unified-grace-5h-utilization0 anthropic-ratelimit-unified-grace-7d-utilization ant
+hropic-ratelimit-unified-overage-disabled-reason anthropic-ratelimit-unified-overage-in-use anthropic-ratelimit-unified-overage-period anthropic-ratel
+imit-unified-overage-period-channel-utilization anthropic-ratelimit-unified-overage-period-monthly-utilization anthropic-ratelimit-unified-overage-res
+et anthropic-ratelimit-unified-overage-scope anthropic-ratelimit-unified-overage-status anthropic-ratelimit-unified-overage-surpassed-threshold anthro
+pic-ratelimit-unified-overage-utilization anthropic-ratelimit-unified-representative-claim anthropic-ratelimit-unified-reset anthropic-ratelimit-unifi
+ed-slow-budget-reset anthropic-ratelimit-unified-slow-budget-utilization anthropic-ratelimit-unified-slow-max-wait anthropic-ratelimit-unified-slow-of
+fer anthropic-ratelimit-unified-slow-retry-after anthropic-ratelimit-unified-slow-status anthropic-ratelimit-unified-status anthropic-ratelimit-unifie
+d-upgrade-paths 

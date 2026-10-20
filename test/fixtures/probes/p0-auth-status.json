@@ -1,0 +1,12 @@
+{
+  "loggedIn": true,
+  "authMethod": "claude.ai",
+  "apiProvider": "firstParty",
+  "analyticsDisabled": false,
+  "projectsDirectory": "/Users/thomash/.claude/projects",
+  "configDirectory": "/Users/thomash/.claude",
+  "email": "REDACTED",
+  "orgId": "REDACTED",
+  "orgName": "REDACTED",
+  "subscriptionType": "max"
+}

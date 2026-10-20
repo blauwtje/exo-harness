@@ -1,0 +1,2 @@
+cd /tmp/exo-deck-probe-5 && env -u ANTHROPIC_API_KEY claude -p /exo:build docs/none.md --output-format stream-json --verbose --model haiku --max-turns 1
+exit 1

@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Use the AskUserQuestion tool to ask me whether I prefer A or B. Do nothing else."}}
+{"type":"control_response","response":{"subtype":"success","request_id":"26cd0f1c-dcc6-459e-9464-0257379ad3e9","response":{"behavior":"deny","message":"probe deny"}}}

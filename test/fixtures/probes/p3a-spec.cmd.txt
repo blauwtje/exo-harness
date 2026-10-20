@@ -1,0 +1,2 @@
+cd /tmp/exo-deck-probe-3 && env -u ANTHROPIC_API_KEY claude -p /exo:spec add a hello script --output-format stream-json --verbose --model haiku --max-turns 1
+exit 1

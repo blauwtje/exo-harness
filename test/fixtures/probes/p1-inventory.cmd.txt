@@ -1,0 +1,2 @@
+cd /tmp/exo-deck-probe-1 && env -u ANTHROPIC_API_KEY claude -p Reply with the single word ok. --output-format stream-json --verbose --model haiku --max-turns 1
+exit 0

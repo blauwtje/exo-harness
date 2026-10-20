@@ -1,0 +1,2 @@
+cd /tmp/exo-deck-probe-11 && env -u ANTHROPIC_API_KEY claude -p Remember the code word pineapple. Reply with the single word ok. --session-id 94b45d0a-ae61-4175-92c6-965c34c4e819 --output-format stream-json --verbose --model haiku --max-turns 1
+exit 0

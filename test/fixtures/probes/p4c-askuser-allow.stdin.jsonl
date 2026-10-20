@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Use the AskUserQuestion tool to ask me whether I prefer A or B. Do nothing else."}}
+{"type":"control_response","response":{"subtype":"success","request_id":"df840a3f-db36-4188-b406-c8c5b02f4e7d","response":{"behavior":"allow","updatedInput":{"questions":[{"question":"Do you prefer A or B?","header":"Preference","options":[{"label":"A","description":"Choose option A"},{"label":"B","description":"Choose option B"}],"multiSelect":false}],"answers":{"Do you prefer A or B?":"A"}}}}}

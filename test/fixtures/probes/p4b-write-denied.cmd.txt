@@ -1,0 +1,2 @@
+cd /tmp/exo-deck-probe-7 && env -u ANTHROPIC_API_KEY claude -p Create a file named x.txt containing hi using the Write tool. --output-format stream-json --verbose --model haiku --max-turns 2 --permission-mode default
+exit 0

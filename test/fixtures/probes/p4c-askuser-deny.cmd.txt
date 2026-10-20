@@ -1,0 +1,4 @@
+cd /tmp/exo-deck-probe-9 && env -u ANTHROPIC_API_KEY claude -p --input-format stream-json --output-format stream-json --verbose --permission-prompt-tool stdio --model haiku --max-turns 3 --permission-mode default
+# stdin line 1: {"type":"user","message":{"role":"user","content":"Use the AskUserQuestion tool to ask me whether I prefer A or B. Do nothing else."}}
+# control mode: deny
+# exit 0 
