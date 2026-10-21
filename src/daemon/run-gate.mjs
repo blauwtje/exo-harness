@@ -12,6 +12,10 @@ const git = (cwd, args) =>
 const text = (path) => readFile(path, 'utf8').catch(() => '');
 const lines = (s) => s.split('\n').filter(Boolean);
 
+// why: S-16; a gate line already closed is not open, every other line is, so a card never hides one behind another.
+export const gateLines = (text) => lines(text).filter((l) => !/^-\s*(closed|resolved|approved|done):/i.test(l));
+export const isLimitLine = (l) => /(usage|rate)[ _-]limit|limit (reached|hit)/i.test(l);
+
 async function conflictFiles(runRoot, base, branch) {
   const r = await git(runRoot, ['merge-tree', '--write-tree', '--name-only', '--no-messages', base, branch]);
   if (r.code !== 1) return [];
@@ -27,7 +31,7 @@ export async function gateDetails({ runDir, runRoot, base, branch }) {
     git(runRoot, ['diff', '--name-only', `${base}...${branch}`]),
   ]);
   return {
-    gates: lines(gates),
+    gates: gateLines(gates),
     diffStat: stat.stdout,
     files: lines(names.stdout),
     reportHead: report.split('\n').slice(0, 15).join('\n'),

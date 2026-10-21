@@ -13,11 +13,12 @@ import { createQueue } from './queue.mjs';
 import { reconcile } from './reconcile.mjs';
 import { archiveRun, removeWorktree } from './archive.mjs';
 import { FINAL_PHASES, approveRun, holderDone, resumeRun, startRun } from './exo-run.mjs';
-import { fileDiff, finishLand, gateDetails } from './run-gate.mjs';
+import { fileDiff, finishLand, gateDetails, isLimitLine } from './run-gate.mjs';
 import { checkCollision, checkProvider, readPlan, runCwd } from './run-guard.mjs';
 import { watchRun } from './run-watch.mjs';
 import { runSetup } from './setup.mjs';
-import { loadSettings, saveSettings } from './settings.mjs';
+import { setBudget } from './dial.mjs';
+import { DEFAULTS, loadSettings, saveSettings } from './settings.mjs';
 import { failureInbox } from './outcomes.mjs';
 import { createServer } from './server.mjs';
 import { isDone } from './shape-guard.mjs';
@@ -29,6 +30,17 @@ import { mergeUsage, readIterLogUsage, readStatuslineCache, usageFromEvent } fro
 import { createWorktree } from './worktree.mjs';
 
 const git = promisify(execFile);
+// why: Decision 12; exo's own budget values, cheapest first. `off` lifts the cap, so it ranks as the dearest.
+const DIAL = ['fast', 'balanced', 'quality', 'off'];
+const currentDial = (project) => {
+  try { return JSON.parse(readFileSync(join(project.path, '.claude', 'exo.local.json'), 'utf8')).budget ?? null; } catch { return null; }
+};
+// why: an unknown current value counts as a raise, so the gate errs toward asking.
+const isRaise = (from, to) => !DIAL.includes(from) || DIAL.indexOf(to) > DIAL.indexOf(from);
+
+// why: the same rule admission applies (Decision 7), kept here because admission.mjs only exports `admit`.
+const overageActive = (o) => Boolean(o) && (o.isUsingOverage === true || (o.status != null && o.status !== 'rejected'));
+
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const text = (v, name) => {
   if (typeof v !== 'string' || !v.trim()) throw fail(400, `${name} is required`);
@@ -59,6 +71,10 @@ const ROUTES = [
   ['POST', '/api/stop-all', 'stopAll'],
   ['GET', '/api/settings', 'getSettings'],
   ['PUT', '/api/settings', 'putSettings'],
+  ['POST', '/api/budget', 'budget'],
+  ['POST', '/api/overage/allow', 'allowOverage'],
+  ['POST', '/api/needs/:id/approve', 'approveNeed'],
+  ['POST', '/api/needs/:id/reject', 'rejectNeed'],
   ['GET', '/api/queue', 'getQueue'],
   ['POST', '/api/queue/reorder', 'reorderQueue'],
   ['POST', '/api/queue/priority', 'prioritize'],
@@ -104,8 +120,20 @@ export function createApp({
   const cachePath = statuslinePath ?? null;
   let eventUsage = {};
   let overage = null;
-  // why: only an explicit toggle lifts overage (Decision 7), so settings reach admission with it false.
-  const settingsNow = () => ({ ...loadSettings(dataDir), overageAllowed: false });
+  // why: only the explicit toggle lifts overage (Decision 7); it lives in memory so a restart resets it, and settings files never carry it.
+  let overageOk = false;
+  const settingsNow = () => ({ ...loadSettings(dataDir), overageAllowed: overageOk });
+  // why: Decisions 7 and 12; global Needs-you items (budget raises, overage) live in state.needs beside the job cards.
+  state.needs = (state.needs ?? []).filter((n) => n.kind === 'budget');
+  const addNeed = (item) => { const n = { id: `need-${randomBytes(6).toString('hex')}`, options: ['approve', 'reject'], ...item }; state.needs.push(n); return n; };
+  function syncOverage() {
+    const has = state.needs.find((n) => n.kind === 'overage');
+    const active = overageActive(overage) && !overageOk;
+    if (active && !has) addNeed({ id: 'overage', kind: 'overage', resetsAt: overage.resetsAt ?? null, options: ['allow'] });
+    else if (!active && has) state.needs = state.needs.filter((n) => n !== has);
+    else return;
+    store.save(state);
+  }
   const liveRuns = () => state.jobs.filter((j) => j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot);
   const usageNow = () => ({
     ...mergeUsage(eventUsage, (cachePath ? readStatuslineCache(cachePath) : {}), ...[...new Set(liveRuns().map((j) => j.runRoot))].map(readIterLogUsage)),
@@ -126,6 +154,7 @@ export function createApp({
     eventUsage = mergeUsage(eventUsage, usageFromEvent(event, at));
     const parsed = parseRateLimitEvent(event, at);
     if (parsed) overage = { ...parsed.overage, resetsAt: parsed.windows[parsed.rateLimitType]?.resetsAt ?? null };
+    if (parsed) syncOverage();
     const hit = detectLimit(event);
     if (hit) limitHit(jobId, hit);
   }
@@ -384,9 +413,11 @@ export function createApp({
       return landOrCard({ j, card, project, base: landBase });
     }
     const conflict = reasons.some((x) => x.includes('rebase conflict'));
+    // why: S-16; only a gate whose every open line is a limit line is a `limit` card, and nothing approves it but the user (Decision 2).
+    const limitOnly = d.gates.length > 0 && d.gates.every(isLimitLine);
     Object.assign(j, {
       status: 'waiting',
-      needsYou: { kind: conflict ? 'conflict' : 'gate', ...d, base: await baseOf(project), worktree: j.worktree, options: conflict ? ['find-cause', 'manual', 'approve', 'reject'] : ['approve', 'reject'] },
+      needsYou: { kind: conflict ? 'conflict' : limitOnly ? 'limit' : 'gate', ...d, base: await baseOf(project), worktree: j.worktree, options: conflict ? ['find-cause', 'manual', 'approve', 'reject'] : ['approve', 'reject'] },
     });
     card.lane = 'Review';
     store.save(state);
@@ -609,7 +640,7 @@ export function createApp({
       approving.add(id);
       try { return await startFor(Object.assign(j, { status: 'running' }), cardOf(j.cardId)); } finally { approving.delete(id); }
     },
-    approveGate: ({ id }) => again(id, ['gate', 'conflict'], (j) => approveRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
+    approveGate: ({ id }) => again(id, ['gate', 'conflict', 'limit'], (j) => approveRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
     resumeRunRoute({ id }) {
       const j = job(id);
       if (j.initMismatches?.length) throw fail(409, 'a run stopped by the init check is never resumed');
@@ -623,7 +654,7 @@ export function createApp({
     },
     rejectGate({ id }) {
       const j = job(id);
-      needs(j, 'gate', 'conflict');
+      needs(j, 'gate', 'conflict', 'limit');
       delete j.needsYou;
       j.status = 'stopped';
       cardOf(j.cardId).lane = 'Shaped';
@@ -654,7 +685,7 @@ export function createApp({
     },
     async diff({ id, url }) {
       const j = job(id);
-      const { base } = needs(j, 'gate', 'conflict');
+      const { base } = needs(j, 'gate', 'conflict', 'limit');
       try { return { diff: await fileDiff({ runRoot: j.runRoot, base, branch: j.run.branch, file: url.searchParams.get('file') }) }; } catch (e) { throw fail(400, e.message); }
     },
     async reply({ id, body }) {
@@ -700,10 +731,63 @@ export function createApp({
     getSettings: () => settingsNow(),
     putSettings({ body }) {
       if (body && 'overageAllowed' in body) throw fail(400, 'overageAllowed is not set here');
-      const r = saveSettings(dataDir, body);
+      // why: Decision 12; a ceiling raised above the default waits for Approve, a lower one applies at once.
+      const now = loadSettings(dataDir).ceilings;
+      const raised = {};
+      const rest = body?.ceilings && typeof body.ceilings === 'object' ? { ...body, ceilings: { ...body.ceilings } } : body;
+      for (const k of ['fiveHour', 'sevenDay']) {
+        const v = rest?.ceilings?.[k];
+        if (typeof v === 'number' && v > 0 && v <= 1 && v > DEFAULTS.ceilings[k] && v > now[k]) { raised[k] = v; delete rest.ceilings[k]; }
+      }
+      const r = saveSettings(dataDir, rest);
       if (r.error) throw fail(400, r.error);
+      if (Object.keys(raised).length) { addNeed({ kind: 'budget', title: 'Raise budget ceilings', change: { ceilings: raised } }); store.save(state); }
       drain();
       return settingsNow();
+    },
+    async budget({ body }) {
+      const project = state.projects.find((p) => p.key === body?.projectKey) ?? (() => { throw fail(404, 'unknown project'); })();
+      const value = body.value;
+      if (!DIAL.includes(value)) throw fail(400, `budget must be one of ${DIAL.join(', ')}`);
+      if (isRaise(currentDial(project), value)) {
+        const n = addNeed({ kind: 'budget', title: `Raise the budget to ${value}`, change: { projectKey: project.key, dial: value } });
+        store.save(state);
+        return { gated: n };
+      }
+      const r = await setBudget({ project, value, pluginRoot });
+      if (!r.ok) throw fail(409, r.text);
+      return { applied: true };
+    },
+    allowOverage() {
+      overageOk = true;
+      syncOverage();
+      drain();
+      return { ok: true };
+    },
+    async approveNeed({ id }) {
+      const n = state.needs.find((x) => x.id === id && x.kind === 'budget') ?? (() => { throw fail(404, 'no such budget item'); })();
+      if (approving.has(id)) throw fail(409, 'item is being applied');
+      approving.add(id);
+      try {
+        if (n.change.ceilings) {
+          const r = saveSettings(dataDir, { ceilings: n.change.ceilings });
+          if (r.error) throw fail(400, r.error);
+        } else {
+          const project = state.projects.find((p) => p.key === n.change.projectKey) ?? (() => { throw fail(404, 'unknown project'); })();
+          const r = await setBudget({ project, value: n.change.dial, pluginRoot });
+          if (!r.ok) throw fail(409, r.text);
+        }
+        state.needs = state.needs.filter((x) => x !== n);
+        store.save(state);
+        drain();
+        return { ok: true };
+      } finally { approving.delete(id); }
+    },
+    rejectNeed({ id }) {
+      const n = state.needs.find((x) => x.id === id && x.kind === 'budget') ?? (() => { throw fail(404, 'no such budget item'); })();
+      state.needs = state.needs.filter((x) => x !== n);
+      store.save(state);
+      return { ok: true };
     },
     getQueue: () => qm.snapshot(),
     reorderQueue({ body }) {

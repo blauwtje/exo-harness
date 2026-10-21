@@ -95,6 +95,8 @@ test('C-05 the queue never starts a run past the ceiling, and restoring it start
     assert.deepEqual((await t.api('GET', '/api/state')).body.queue.projectPriority, ['local/p']);
 
     assert.equal((await t.api('PUT', '/api/settings', { ceilings: { fiveHour: 0.9 } })).status, 200);
+    const raise = t.state.needs.find((n) => n.kind === 'budget');
+    assert.equal((await t.api('POST', `/api/needs/${raise.id}/approve`)).status, 200);
     const started = t.runs().filter((j) => j.status !== 'queued');
     assert.equal(started.length, 1);
     assert.equal(started[0].id, [...queue.order].reverse()[0]);
