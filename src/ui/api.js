@@ -54,6 +54,10 @@ export function createApi(token) {
     resumeRun: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/resume-run`, {}),
     discard: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/discard`, {}),
     diff: (id, file) => call('GET', `/api/jobs/${encodeURIComponent(id)}/diff?file=${encodeURIComponent(file)}`),
+    getSettings: () => call('GET', '/api/settings'),
+    putSettings: (patch) => call('PUT', '/api/settings', patch),
+    setBudget: (projectKey, value) => call('POST', '/api/budget', { projectKey, value }),
+    allowOverage: () => call('POST', '/api/overage/allow', {}),
     events: () => new EventSource(`/events?token=${encodeURIComponent(token)}`),
   };
 }

@@ -10,9 +10,11 @@ import CrewPanel from './CrewPanel.jsx';
 import Gauges from './Gauges.jsx';
 import JobView from './JobView.jsx';
 import NeedsYou from './NeedsYou.jsx';
+import Settings from './Settings.jsx';
 
 const TOKEN = readToken();
 const jobFromHash = () => /^#\/jobs\/(.+)$/.exec(location.hash)?.[1] ?? null;
+const onSettings = () => location.hash === '#/settings';
 const clock = (t) => (t ? new Date(t).toLocaleTimeString('en-GB') : null);
 
 function accessPlate(link) {
@@ -127,13 +129,14 @@ export default function App() {
   const { state, health, events, rate, link } = deck;
   const [projectKey, setProjectKey] = useState(null);
   const [jobId, setJobId] = useState(jobFromHash());
+  const [settingsOpen, setSettingsOpen] = useState(onSettings());
   const [dialog, setDialog] = useState(null);
   const [lastGood, setLastGood] = useState(null);
   const [crewOpen, setCrewOpen] = useState(false);
   const [focusCard, setFocusCard] = useState(null);
 
   useEffect(() => {
-    const on = () => setJobId(jobFromHash());
+    const on = () => { setJobId(jobFromHash()); setSettingsOpen(onSettings()); };
     addEventListener('hashchange', on);
     return () => removeEventListener('hashchange', on);
   }, []);
@@ -160,6 +163,7 @@ export default function App() {
     if (plate) return <main className="center">{plate}</main>;
     if (link === 'down' && !state) return <main className="center"><section className="failed"><p>Couldn't reach the daemon{lastGood ? `. Last updated ${clock(lastGood)}.` : '.'}</p><button className="link" onClick={deck.refresh}>Retry</button></section></main>;
     if (!state) return <main className="center" aria-busy="true"><div className="bars"><i /><i /><i /></div></main>;
+    if (settingsOpen) return <main className="center"><Settings state={state} project={project} api={deck.api} back={back} /></main>;
     if (!project) return <main className="center"><section className="first"><h2>No project yet</h2><p className="dim">A project is a git repository the agents work in.</p><button className="btn btn-edge" onClick={() => setDialog('project')}>Add a project</button></section></main>;
     if (job) return <main className="center"><JobView job={job} card={state.cards.find((c) => c.id === job.cardId)} events={events[job.id] ?? []} deck={deck} back={back} /></main>;
     if (jobId) return <main className="center"><section className="failed"><p>That job isn't in the daemon's state.</p><button className="link" onClick={back}>Back to board</button></section></main>;
@@ -183,6 +187,7 @@ export default function App() {
           <Gauges rate={rate} offline={shownLink === 'down'} />
           <div className="top-end">
             <span className="linkstate" data-link={shownLink} role="status"><i aria-hidden="true" />{linkText}</span>
+            <button className="btn btn-edge" aria-pressed={settingsOpen} onClick={() => { location.hash = '#/settings'; }}>Settings</button>
             {job ? null : <button className="btn btn-edge crew-toggle" aria-expanded={crewOpen} aria-controls="crew-panel" onClick={() => setCrewOpen((o) => !o)}>Crew <span className="num">{liveCount}</span></button>}
             <StopAll live={liveCount} deck={deck} offline={shownLink === 'down'} />
           </div>
