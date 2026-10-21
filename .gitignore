@@ -7,3 +7,26 @@ dist/
 .taste-skill/
 test-results/
 playwright-report/
+
+# Local env files and keys
+.env
+.env.*
+!.env.example
+*.pem
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Logs, caches and coverage
+/*.log
+npm-debug.log*
+coverage/
+.vite/
+blob-report/
+playwright/.cache/
+
+# OS and editor files
+Thumbs.db
+.idea/
+.vscode/
+*.swp
