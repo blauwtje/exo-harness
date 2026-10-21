@@ -71,4 +71,8 @@ test('ships a fake exo plugin root', () => {
   const manifest = JSON.parse(readFileSync(join(root, 'plugin-root/.claude-plugin/plugin.json'), 'utf8'));
   assert.equal(manifest.name, 'exo');
   assert.ok(existsSync(join(root, 'plugin-root/skills/spec/SKILL.md')));
+  assert.equal(JSON.parse(readFileSync(join(root, 'plugin-root/package.json'), 'utf8')).version, '0.136.0');
+  for (const f of ['build/scripts/exo-cli.mjs', 'build/scripts/remove-worktree.mjs', 'configure/scripts/settings.mjs']) {
+    assert.ok(existsSync(join(root, 'plugin-root/skills', f)), f);
+  }
 });

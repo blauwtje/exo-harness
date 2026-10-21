@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../../src/daemon/app.mjs';
 
+const PLUGIN_ROOT = fileURLToPath(new URL('../fake-claude/plugin-root', import.meta.url));
 const tmp = (p) => realpathSync(mkdtempSync(join(tmpdir(), p)));
 export const DIST = fileURLToPath(new URL('../../dist', import.meta.url));
 
@@ -67,11 +68,7 @@ const USAGE = ${JSON.stringify(USAGE)};
 
 function plugin() {
   const root = tmp('deck-plugin-');
-  mkdirSync(join(root, 'skills', 'spec', 'scripts'), { recursive: true });
-  mkdirSync(join(root, 'skills', 'configure', 'scripts'), { recursive: true });
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '0.136.0' }));
-  writeFileSync(join(root, 'skills', 'spec', 'scripts', 'plan-check.mjs'), 'process.exit(0);');
-  writeFileSync(join(root, 'skills', 'configure', 'scripts', 'settings.mjs'), 'console.log("docs");');
+  cpSync(PLUGIN_ROOT, root, { recursive: true });
   return root;
 }
 

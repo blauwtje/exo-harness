@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/daemon/app.mjs';
 
 const tmp = (p) => realpathSync(mkdtempSync(join(tmpdir(), p)));
@@ -51,9 +52,7 @@ const say = (t) => out({ type: 'assistant', message: { content: [{ type: 'text',
 
 function plugin() {
   const root = tmp('flow-plugin-');
-  mkdirSync(join(root, 'skills', 'spec', 'scripts'), { recursive: true });
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '0.136.0' }));
-  writeFileSync(join(root, 'skills', 'spec', 'scripts', 'plan-check.mjs'), 'process.exit(0);');
+  cpSync(fileURLToPath(new URL('./fake-claude/plugin-root', import.meta.url)), root, { recursive: true });
   return root;
 }
 

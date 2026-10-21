@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,9 +39,7 @@ function setup() {
   writeFileSync(bin, CLAUDE);
   chmodSync(bin, 0o755);
   const plugin = join(root, 'plugin');
-  mkdirSync(join(plugin, 'skills', 'spec', 'scripts'), { recursive: true });
-  writeFileSync(join(plugin, 'package.json'), JSON.stringify({ version: '0.136.0' }));
-  writeFileSync(join(plugin, 'skills', 'spec', 'scripts', 'plan-check.mjs'), 'process.exit(0);');
+  cpSync(fileURLToPath(new URL('../test/fake-claude/plugin-root', import.meta.url)), plugin, { recursive: true });
   const repo = join(root, 'repo');
   mkdirSync(repo);
   const g = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a]);
