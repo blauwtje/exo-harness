@@ -65,6 +65,8 @@ export async function startSession({
   const open = new Set();
   let lastText = '';
   const handle = (raw) => {
+    // why: lines already buffered when kill() fired must not run onTurn; a killed session's later result would overwrite its outcome.
+    if (reason) return;
     const rec = parseLine(raw);
     store.appendEvent(job.id, rec.event ?? { kind: 'malformed', raw });
     const { event } = rec;

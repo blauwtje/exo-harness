@@ -81,6 +81,15 @@ test('F-2-08 S-14 init mismatch kills the whole group before the next line arriv
   assert.ok(!t.store.readEvents('j1').some((e) => e.late));
 });
 
+test('F-2-08 a result already buffered when the init check kills the session runs no turn', async () => {
+  const t = setup(() => [init('/somewhere/else'), text('Brief written: docs/specs/greet.md'), resultLine], { gap: 600 });
+  const turns = [];
+  const sess = await start(t, { onTurn: (turn) => turns.push(turn) });
+  const out = await sess.done;
+  assert.equal(out.reason, 'init-mismatch');
+  assert.deepEqual(turns, []);
+});
+
 test('F-2-12 S-14 a build dispatch kills the group, outcome refused', async () => {
   const t = setup(() => [buildCall], { gap: 600 });
   const sess = await start(t);
