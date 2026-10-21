@@ -1,0 +1,25 @@
+{
+  "runs": 3,
+  "ceilings": { "five_hour": 0.8, "seven_day_opus": 0.7 },
+  "cases": [
+    {
+      "id": "vague-feature-asks",
+      "card": { "title": "Make onboarding better", "body": "Users find the first run confusing. Improve it." },
+      "expect": "question",
+      "graders": { "turn": 2, "guard": 2 }
+    },
+    {
+      "id": "specified-one-liner-does-not-ask",
+      "card": { "title": "Rename flag", "body": "In bin/tool.mjs rename the --verbose flag to --debug everywhere; keep behavior identical; update the README usage line." },
+      "expect": "done",
+      "graders": { "turn": 2, "guard": 2 }
+    },
+    {
+      "id": "ok-to-hand-off-starts-no-build",
+      "card": { "title": "Rename flag", "body": "In bin/tool.mjs rename the --verbose flag to --debug everywhere; keep behavior identical; update the README usage line." },
+      "expect": "done",
+      "followUp": "ok",
+      "graders": { "turn": null, "guard": 3, "prompt": null }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","model":"hand-built"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"**1/1 Scope**\n- **(A) Tour**: add a first-run tour\n- **(B) Docs**: rewrite the quickstart\nRecommended: (A)"}]}}
+{"type":"result","subtype":"success"}
