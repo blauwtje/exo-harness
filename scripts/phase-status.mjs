@@ -32,6 +32,7 @@ try { walk(...[JSON.parse(pw.stdout)].map((r) => ({ suites: r.suites }))); } cat
 
 const proved = (id) => {
   if (id === 'F-2-22') return existsSync(root + 'docs/design/contract-selected.json');
+  if (id === 'F-3-01') return /^## Probe P3$/m.test(read('docs/facts.md'));
   if (id === 'C-07') return /^- Next: .*phase 3/im.test(read('docs/progress.md'));
   return passed.has(id) && !failed.has(id);
 };
