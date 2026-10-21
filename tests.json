@@ -172,7 +172,7 @@
     "phase": 3,
     "kind": "feature",
     "title": "Probe P3 first: exo run from a linked worktree with Land: local and Land: none, scratch repo with a local bare origin; result in facts.md (M3).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-02",

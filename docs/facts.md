@@ -65,3 +65,11 @@ Environment: macOS, Node v24.22.0, `claude` 2.1.305 at `~/.local/bin/claude`, `e
 ## Libraries (verify_first 5)
 
 Matches: `motion` 14.4.0, `@xyflow/react` 12.12.0, Tauri 2.12 (`@tauri-apps/cli` 2.12.3). Changed: Electron 44.9.2; TypeScript 7.0.2; Base UI is now `@base-ui/react` 1.9.0 (old name deprecated). Magic UI has no npm package (copy-in registry). Fonts Geist, Geist Mono, Space Grotesk, JetBrains Mono: OFL-1.1. `node:sqlite` loads unflagged on Node 24; confirm on 22 before use.
+
+## Probe P3
+
+- Land: local: final phase `parked` (exit 3), run 20261021T104011-6966 from a linked worktree
+  - gate: `- open: land: land anyway (review not clean: no branch review)`
+- Land: none: final phase `passed` (exit 0), run 20261021T104026-b9b4 from a linked worktree
+  - gates: none
+
