@@ -14,3 +14,9 @@ test('C-04 F-3-09 the run acceptance lands a card, archives the run and leaves n
   const out = execFileSync(process.execPath, [script], { encoding: 'utf8', timeout: 60000 });
   assert.match(out, /accept: pass/);
 });
+
+test('C-05 S-03 S-08 the queue acceptance holds at a ceiling, pauses on a limit and holds offline', () => {
+  const script = fileURLToPath(new URL('../scripts/accept-queue.mjs', import.meta.url));
+  const out = execFileSync(process.execPath, [script], { encoding: 'utf8', timeout: 60000 });
+  assert.match(out, /accept-queue: pass/);
+});

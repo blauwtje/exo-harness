@@ -49,7 +49,7 @@ function setup() {
 }
 
 function startDaemon({ bin, plugin }) {
-  const env = { ...process.env, EXO_HARNESS_DATA: join(root, 'data'), EXO_HARNESS_CLAUDE: bin, EXO_PLUGIN_ROOT: plugin, FAKE_EXO_SCENARIO: JSON.stringify({ id: 'acc-1', phase: 'landed', branch: 'feat-greet' }) };
+  const env = { ...process.env, HOME: join(root, 'home'), EXO_HARNESS_DATA: join(root, 'data'), EXO_HARNESS_CLAUDE: bin, EXO_PLUGIN_ROOT: plugin, FAKE_EXO_SCENARIO: JSON.stringify({ id: 'acc-1', phase: 'landed', branch: 'feat-greet' }) };
   const child = spawn(process.execPath, [entry, '--fixtures'], { env, stdio: ['ignore', 'pipe', 'inherit'] });
   const url = new Promise((resolve, reject) => {
     let seen = '';
