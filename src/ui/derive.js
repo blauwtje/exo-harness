@@ -48,7 +48,6 @@ export function needsYou(state, health) {
     } else if (job.outcome === 'invariant') items.push({ kind: 'invariant', key: `inv:${job.id}`, job, card });
     else if (job.status === 'crashed') items.push({ kind: 'failure', key: `fail:${job.id}`, job, card });
   }
-  // why: Decisions 7 and 12; budget raises and the overage item live in state.needs, not on a job.
   for (const need of state.needs ?? []) items.push({ kind: need.kind, key: `need:${need.id}`, need });
   for (const [name, check] of Object.entries(health ?? {})) {
     if (check && check.ok === false) items.push({ kind: 'health', key: `health:${name}`, name, check });

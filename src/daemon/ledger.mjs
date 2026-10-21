@@ -22,7 +22,6 @@ export function ledgerRow(resultEvent, previousRow, at = Date.now()) {
   return row;
 }
 
-// why: the caller keeps this history in state.json under utilizationHistory (Decision 6).
 export function recordUtilization(history, stage, delta) {
   if (!Number.isFinite(delta) || delta < 0) return history ?? {};
   const samples = [...(history?.[stage] ?? []), delta].slice(-MAX_SAMPLES);

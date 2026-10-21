@@ -34,13 +34,11 @@ import { mergeUsage, readIterLogUsage, readStatuslineCache, usageFromEvent } fro
 import { createWorktree } from './worktree.mjs';
 
 const git = promisify(execFile);
-// why: Decision 12; exo's own budget values, cheapest first. `off` lifts the cap, so it ranks as the dearest.
-const DIAL = ['fast', 'balanced', 'quality', 'off'];
+const BUDGET_VALUES_CHEAPEST_FIRST = ['fast', 'balanced', 'quality', 'off'];
 const currentDial = (project) => {
   try { return JSON.parse(readFileSync(join(project.path, '.claude', 'exo.local.json'), 'utf8')).budget ?? null; } catch { return null; }
 };
-// why: an unknown current value counts as a raise, so the gate errs toward asking.
-const isRaise = (from, to) => !DIAL.includes(from) || DIAL.indexOf(to) > DIAL.indexOf(from);
+const isRaiseOrUnknownCurrent = (from, to) => !BUDGET_VALUES_CHEAPEST_FIRST.includes(from) || BUDGET_VALUES_CHEAPEST_FIRST.indexOf(to) > BUDGET_VALUES_CHEAPEST_FIRST.indexOf(from);
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const checked = (r) => {
@@ -117,23 +115,20 @@ export function createApp({
   };
   const supervisor = createSupervisor({
     store, state, onNeedsYou: onNeedsYou ?? ((job, needs) => push('needs-you', { jobId: job.id, needs })),
+    admit: (j) => check(j.stage, j.id),
   });
 
-  // why: Decisions 6, 7, 9, 15, 16; every job start asks `admit` and a refusal leaves a queued job with its reason.
   const qm = createQueue(state);
-  // why: the entry passes the real statusline cache; without it only stream events and iter logs count, so tests never read the user's own usage.
-  const cachePath = statuslinePath ?? null;
+  const statuslineCachePath = statuslinePath ?? null;
   let eventUsage = {};
   let overage = null;
-  // why: only the explicit toggle lifts overage (Decision 7); it lives in memory so a restart resets it, and settings files never carry it.
-  let overageOk = false;
-  const settingsNow = () => ({ ...loadSettings(dataDir), overageAllowed: overageOk });
-  // why: Decisions 7 and 12; global Needs-you items (budget raises, overage) live in state.needs beside the job cards.
+  let overageAllowedByUser = false;
+  const settingsNow = () => ({ ...loadSettings(dataDir), overageAllowed: overageAllowedByUser });
   state.needs = (state.needs ?? []).filter((n) => n.kind === 'budget');
   const addNeed = (item) => { const n = { id: `need-${randomBytes(6).toString('hex')}`, options: ['approve', 'reject'], ...item }; state.needs.push(n); return n; };
   function syncOverage() {
     const has = state.needs.find((n) => n.kind === 'overage');
-    const active = overageActive(overage) && !overageOk;
+    const active = overageActive(overage) && !overageAllowedByUser;
     if (active && !has) addNeed({ id: 'overage', kind: 'overage', resetsAt: overage.resetsAt ?? null, options: ['allow'] });
     else if (!active && has) state.needs = state.needs.filter((n) => n !== has);
     else return;
@@ -141,7 +136,7 @@ export function createApp({
   }
   const liveRuns = () => state.jobs.filter((j) => j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot);
   const usageNow = () => ({
-    ...mergeUsage(eventUsage, (cachePath ? readStatuslineCache(cachePath) : {}), ...[...new Set(liveRuns().map((j) => j.runRoot))].map(readIterLogUsage)),
+    ...mergeUsage(eventUsage, (statuslineCachePath ? readStatuslineCache(statuslineCachePath) : {}), ...[...new Set(liveRuns().map((j) => j.runRoot))].map(readIterLogUsage)),
     overage,
   });
   const runningCount = (except) => state.jobs.filter((j) => j.id !== except && ['starting', 'running'].includes(j.status)).length;
@@ -165,21 +160,23 @@ export function createApp({
     if (event?.type === 'result') recordResult(jobId, event, at);
   }
 
-  // why: Decisions 6 and 13; each result adds a ledger row, and a finished job adds one utilization sample (the window's rise from its start to its last result) to the history p75 reads.
   const startUtil = new Map();
   const lastUtil = new Map();
-  const stageUtil = (stage) => usageNow()[stageWindows(stage)[0]]?.utilization;
+  const advisoryStageUtilization = (stage) => {
+    let windows;
+    try { windows = stageWindows(stage); } catch { return undefined; }
+    return usageNow()[windows[0]]?.utilization;
+  };
   function recordResult(jobId, event, at) {
     const j = state.jobs.find((x) => x.id === jobId);
     if (!j) return;
     const row = ledgerRow(event, j.ledger?.at(-1), at);
     if (row) (j.ledger ??= []).push(row);
-    const to = stageUtil(j.stage);
+    const to = advisoryStageUtilization(j.stage);
     if (typeof to === 'number') lastUtil.set(j.id, to);
     store.save(state);
   }
-  // why: a limit-hit job is unfinished and restarts later, so its partial rise is no sample of a whole job.
-  function sampleJob(j) {
+  function recordUtilizationUnlessLimitHit(j) {
     const from = startUtil.get(j.id);
     const to = lastUtil.get(j.id);
     startUtil.delete(j.id);
@@ -213,8 +210,7 @@ export function createApp({
     supervisor.stop(j.id).catch(() => {});
   }
 
-  // why: a queued job names why it waits, so the gauge can show the ceiling and the resume time.
-  function refresh() {
+  function refreshQueuedReasons() {
     let changed = false;
     for (const id of qm.snapshot().order) {
       const j = state.jobs.find((x) => x.id === id);
@@ -227,19 +223,18 @@ export function createApp({
     if (changed) store.save(state);
   }
 
-  // why: a stale id (job stopped or discarded while queued) is picked so next() drops it, then skipped.
-  const admissible = (id) => {
+  const admissibleOrStale = (id) => {
     const j = state.jobs.find((x) => x.id === id);
     if (j?.status !== 'queued') return true;
     return !j.queued?.holder && check(j.stage, j.id).ok;
   };
 
   function drain() {
-    for (let id; (id = qm.next(admissible));) {
+    for (let id; (id = qm.next(admissibleOrStale));) {
       const j = state.jobs.find((x) => x.id === id);
       if (j?.status === 'queued') begin(j);
     }
-    refresh();
+    refreshQueuedReasons();
   }
 
   function begin(j) {
@@ -300,14 +295,19 @@ export function createApp({
 
   function launch(opts) {
     const { job: j } = opts;
-    // why: every -p start passes here (begin, shape, find-cause, reconcile), so the job's utilization sample starts from this reading.
-    startUtil.set(j.id, stageUtil(j.stage));
+    startUtil.set(j.id, advisoryStageUtilization(j.stage));
     lastUtil.delete(j.id);
     const p = supervisor.start({ claudePath, parentEnv, pluginRoot, ...opts, ...sessionOpts(j, opts.card) });
     sessions.set(j.id, p);
-    p.then((sess) => sess.done).then(({ reason }) => {
+    p.then((sess) => sess.done).then(({ reason, verdict }) => {
       for (const [id, a] of pending) if (a.jobId === j.id) pending.delete(id);
-      if (sessions.get(j.id) === p) sampleJob(j);
+      if (reason === 'deferred' && sessions.get(j.id) === p && !FINAL.has(j.status)) {
+        startUtil.delete(j.id);
+        lastUtil.delete(j.id);
+        holdBack(j, verdict);
+        return drain();
+      }
+      if (sessions.get(j.id) === p) recordUtilizationUnlessLimitHit(j);
       if (sessions.get(j.id) !== p || j.limitHit) return drain();
       if (!FINAL.has(j.status)) {
         j.status = { stopped: 'stopped', refused: 'refused' }[reason] ?? 'crashed';
@@ -454,7 +454,6 @@ export function createApp({
       return landOrCard({ j, card, project, base: landBase });
     }
     const conflict = reasons.some((x) => x.includes('rebase conflict'));
-    // why: S-16; only a gate whose every open line is a limit line is a `limit` card, and nothing approves it but the user (Decision 2).
     const limitOnly = d.gates.length > 0 && d.gates.every(isLimitLine);
     Object.assign(j, {
       status: 'waiting',
@@ -510,7 +509,6 @@ export function createApp({
       return store.save(state);
     }
     if (run.phase === 'refused' && String(run.reason).startsWith('could not fast-forward')) return ffRefused(j, project);
-    // why: Decision 10; the deck never retries an exo run, a no-progress or attempt-cap stop shows its report.md Reason: as the card.
     const report = run.phase === 'stopped' ? await Promise.resolve().then(() => readFile(join(runDirOf(j), 'report.md'), 'utf8')).catch(() => '') : '';
     const stop = runStopCard(report);
     runFailed(j, stop?.reason ?? run.reason ?? `run ${run.phase}`);
@@ -767,7 +765,6 @@ export function createApp({
       return j;
     },
     async stopAll() {
-      // why: Decision 15; Stop all holds the queue until Resume queue, so the drain loop does not restart what was just stopped.
       qm.pause({ reason: 'stopped', since: Date.now() });
       await supervisor.stopAll();
       for (const j of state.jobs) if (!FINAL.has(j.status) && j.status !== 'queued') j.status = 'stopped';
@@ -778,7 +775,6 @@ export function createApp({
     getSettings: () => settingsNow(),
     putSettings({ body }) {
       if (body && 'overageAllowed' in body) throw fail(400, 'overageAllowed is not set here');
-      // why: Decision 12; a ceiling raised above the default waits for Approve, a lower one applies at once.
       const now = loadSettings(dataDir).ceilings;
       const raised = {};
       const rest = body?.ceilings && typeof body.ceilings === 'object' ? { ...body, ceilings: { ...body.ceilings } } : body;
@@ -794,8 +790,8 @@ export function createApp({
     async budget({ body }) {
       const project = state.projects.find((p) => p.key === body?.projectKey) ?? (() => { throw fail(404, 'unknown project'); })();
       const value = body.value;
-      if (!DIAL.includes(value)) throw fail(400, `budget must be one of ${DIAL.join(', ')}`);
-      if (isRaise(currentDial(project), value)) {
+      if (!BUDGET_VALUES_CHEAPEST_FIRST.includes(value)) throw fail(400, `budget must be one of ${BUDGET_VALUES_CHEAPEST_FIRST.join(', ')}`);
+      if (isRaiseOrUnknownCurrent(currentDial(project), value)) {
         const n = addNeed({ kind: 'budget', title: `Raise the budget to ${value}`, change: { projectKey: project.key, dial: value } });
         store.save(state);
         return { gated: n };
@@ -805,9 +801,8 @@ export function createApp({
       return { applied: true };
     },
     allowOverage() {
-      // why: Decision 7; only the Needs-you overage item's toggle lifts overage, so there is nothing to allow before one is active.
       if (!overageActive(overage)) throw fail(409, 'no overage is active');
-      overageOk = true;
+      overageAllowedByUser = true;
       syncOverage();
       drain();
       return { ok: true };

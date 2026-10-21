@@ -11,11 +11,10 @@ const readState = (job) => {
 };
 const validPid = (pid) => Number.isInteger(pid) && pid > 1 && pid !== process.pid;
 
-// why: Decision 8: past hardStopFiveHour an exo run is stopped only at a task boundary (its landed count rising), so no task is cut mid-way and --resume continues it; -p jobs are never in `runs`.
 export function watchHardStop({ getUsage, settings, runs, kill = killGroup, intervalMs = 1000 }) {
   const baseline = new Map();
   const signalled = new Set();
-  const step = (job) => {
+  const stopAtTaskBoundary = (job) => {
     if (signalled.has(job.id) || !job.run?.id || !job.runRoot) return;
     const st = readState(job);
     if (!st || FINAL_PHASES.includes(st.phase) || typeof st.landed !== 'number') return;
@@ -29,7 +28,7 @@ export function watchHardStop({ getUsage, settings, runs, kill = killGroup, inte
     const limit = (typeof settings === 'function' ? settings() : settings).hardStopFiveHour;
     const used = getUsage()?.five_hour?.utilization;
     if (typeof used !== 'number' || used < limit) { baseline.clear(); return; }
-    for (const job of runs()) step(job);
+    for (const job of runs()) stopAtTaskBoundary(job);
   };
   const timer = setInterval(tick, intervalMs);
   timer.unref();

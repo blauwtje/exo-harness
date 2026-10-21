@@ -24,7 +24,6 @@ function repo() {
   return dir;
 }
 
-// why: a claude that logs in, then emits one rate_limit_event carrying overage and idles, so a running -p job reports overage.
 function overageClaude(dir) {
   const bin = join(dir, 'claude-overage');
   writeFileSync(bin, `#!/usr/bin/env node
@@ -183,5 +182,35 @@ test('S-15 overage admits nothing, running jobs drain, and settings cannot lift 
     assert.equal((await t.api('POST', '/api/cards/c1/approve')).body.queued.reason, 'overage');
     await t.api('POST', '/api/queue/resume');
     assert.equal(t.state.jobs.find((j) => j.id === second.body.id).status, 'queued');
+  } finally { await t.app.close(); }
+});
+
+function flakyOverageClaude(dir) {
+  const bin = join(dir, 'claude-flaky');
+  writeFileSync(bin, `#!/usr/bin/env node
+if (process.argv[2] === 'auth') { console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' })); process.exit(0); }
+require('node:fs').appendFileSync(${JSON.stringify(join(dir, 'starts.txt'))}, 'x');
+const out = (o) => console.log(JSON.stringify(o));
+out({ type: 'system', subtype: 'init', cwd: process.cwd(), apiKeySource: 'none', permissionMode: 'default', model: 'm', claude_code_version: '1', plugins: [{ name: 'exo', version: '0.136.0' }] });
+out({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', rateLimitType: 'five_hour', overageStatus: 'allowed', isUsingOverage: true, unifiedWindows: { five_hour: { utilization: 0.1, resetsAt: ${nowSec() + 3600} } } } });
+process.exit(1);
+`);
+  chmodSync(bin, 0o755);
+  return bin;
+}
+
+test('F-4-10 Decision 7 a -p retry under active overage is queued with its reason, never started', async () => {
+  const dir = tmp('qa-claude-');
+  const t = await boot({ claude: flakyOverageClaude(dir) });
+  try {
+    t.state.cards.push({ id: 'k1', projectKey: 'local/p', title: 'First', body: 'x', lane: 'Inbox' });
+    assert.equal((await t.api('POST', '/api/cards/k1/shape')).status, 200);
+    const j = t.state.jobs.find((x) => x.cardId === 'k1');
+    await until(() => j.status === 'queued', 6000);
+    assert.equal(j.queued.reason, 'overage');
+    assert.equal(j.failures.length, 1);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(readFileSync(join(dir, 'starts.txt'), 'utf8'), 'x');
+    assert.equal(j.bugCard, undefined);
   } finally { await t.app.close(); }
 });

@@ -32,7 +32,6 @@ test('S-08 offline, queued jobs start only after the success and the deck state 
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'exo-offline-')));
   const data = join(base, 'data');
   mkdirSync(data);
-  // why: the pause from an earlier failed pair is read back, as after a restart, so the first drain starts nothing.
   writeFileSync(join(data, 'state.json'), JSON.stringify({ projects: [], cards: [{ id: 'c1', projectKey: 'p', title: 'T', lane: 'Shaped' }], jobs: [{ id: 'j1', cardId: 'c1', stage: 'spec', status: 'queued' }] , queue: { pauses: [{ reason: 'offline' }] } }));
   const timers = [];
   const app = createApp({

@@ -64,7 +64,6 @@ export default function Gauges({ rate, offline, state, api }) {
   const [settings, setSettings] = useState(null);
   useEffect(() => { api?.getSettings().then(setSettings, () => setSettings(null)); }, [api, state]);
   const overage = state?.needs?.find((n) => n.kind === 'overage');
-  // why: a limit on a window with no fixed gauge (seven_day_opus, seven_day_sonnet) still shows its resume time (Task 15).
   const extra = [...new Set((state?.queue?.pauses ?? []).filter((p) => p.reason === 'limit' && p.rateLimitType && !WINDOWS.some(([id]) => id === p.rateLimitType)).map((p) => p.rateLimitType))]
     .map((id) => [id, id.replaceAll('_', ' '), null]);
   return (

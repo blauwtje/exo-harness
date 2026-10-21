@@ -102,7 +102,6 @@ const until = async (fn, ms = 8000) => {
   throw new Error('timed out');
 };
 
-// why: a claude that logs in, rewrites the statusline cache a step higher and emits one result per user line, so the window rises per turn.
 async function bootUtil() {
   const base = tmp('rc-util-');
   const data = join(base, 'data');
@@ -215,7 +214,7 @@ test('S-16 the deck card of a limit gate, a budget raise and overage carries its
   assert.match(html, />Allow</);
 });
 
-function retrySetup(attempts, waits = [1, 1]) {
+function retrySetup(attempts, waits = [1, 1], admit) {
   const job = { id: 'j1', cardId: 'c1', stage: 'spec', retryWaitsMs: waits };
   const calls = [];
   const sessionStarter = async ({ store }) => {
@@ -225,7 +224,7 @@ function retrySetup(attempts, waits = [1, 1]) {
     return { pid: 1, done: Promise.resolve({ reason: null }), send() {}, answer() {}, end() {}, stop() {} };
   };
   const store = { save() {}, appendEvent() {} };
-  const sup = createSupervisor({ store, state: { jobs: [job] }, spawnCaffeinate: () => null, sessionStarter });
+  const sup = createSupervisor({ store, state: { jobs: [job] }, spawnCaffeinate: () => null, sessionStarter, admit });
   return { job, calls, sup };
 }
 
@@ -252,4 +251,23 @@ test('F-4-10 the supervisor never retries a model error', async () => {
   const sess = await s.sup.start({ job: s.job, card: {}, worktree: '/tmp', mode: 'start' });
   await sess.done;
   assert.equal(s.calls.length, 1);
+});
+
+test('F-4-10 Decision 7 a retry asks admission and is deferred, never started, when it refuses', async () => {
+  const noResult = [{ type: 'system', subtype: 'init' }];
+  const verdict = { ok: false, reason: 'overage', rateLimitType: null, resetsAt: 5 };
+  const s = retrySetup([noResult, [{ type: 'result', is_error: false }]], [1, 1], () => verdict);
+  const sess = await s.sup.start({ job: s.job, card: {}, worktree: '/tmp', mode: 'start' });
+  const end = await sess.done;
+  assert.equal(s.calls.length, 1);
+  assert.equal(end.reason, 'deferred');
+  assert.deepEqual(end.verdict, verdict);
+});
+
+test('F-4-10 Decision 7 a retry that admission allows still starts', async () => {
+  const noResult = [{ type: 'system', subtype: 'init' }];
+  const s = retrySetup([noResult, [{ type: 'result', is_error: false }]], [1, 1], () => ({ ok: true }));
+  const sess = await s.sup.start({ job: s.job, card: {}, worktree: '/tmp', mode: 'start' });
+  await sess.done;
+  assert.equal(s.calls.length, 2);
 });

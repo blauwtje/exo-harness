@@ -39,14 +39,13 @@ function setup() {
   seed.cards.push({ id: 'k1', projectKey: 'local/p', title: 'Shape me', body: 'x', lane: 'Inbox' });
   mkdirSync(join(root, 'data'));
   writeFileSync(join(root, 'data', 'state.json'), JSON.stringify(seed));
-  // why: the daemon passes its own env to every job, so this wrapper turns on FAKE_CLAUDE_LIMIT only once the flag file exists.
-  const bin = join(root, 'claude');
-  writeFileSync(bin, `#!/bin/sh\nif [ -f "${limitFlag}" ]; then export FAKE_CLAUDE_LIMIT="$(cat "${limitFlag}")"; fi\nexec "${fakeClaude}" "$@"\n`);
-  chmodSync(bin, 0o755);
+  const claudeWrapperEnablingLimitFromFlagFile = join(root, 'claude');
+  writeFileSync(claudeWrapperEnablingLimitFromFlagFile, `#!/bin/sh\nif [ -f "${limitFlag}" ]; then export FAKE_CLAUDE_LIMIT="$(cat "${limitFlag}")"; fi\nexec "${fakeClaude}" "$@"\n`);
+  chmodSync(claudeWrapperEnablingLimitFromFlagFile, 0o755);
   const cache = join(root, 'home', '.cache', 'exo');
   mkdirSync(cache, { recursive: true });
   writeFileSync(join(cache, 'statusline-rate-limits.json'), JSON.stringify({ five_hour: { used_percentage: 60, resets_at: nowSec() + 7200 } }));
-  return bin;
+  return claudeWrapperEnablingLimitFromFlagFile;
 }
 
 const bin = setup();
@@ -72,7 +71,6 @@ try {
   const state = async () => (await api('GET', '/api/state')).body;
   const runs = async () => (await state()).jobs.filter((j) => j.stage === 'run');
 
-  // why: C-05; a ceiling under the 0.60 usage starts nothing and names why.
   assert.equal((await api('PUT', '/api/settings', { ceilings: { fiveHour: 0.5 } })).status, 200);
   assert.equal((await api('POST', '/api/cards/c1/approve')).status, 200);
   assert.equal((await api('POST', '/api/cards/c2/approve')).status, 200);
@@ -85,21 +83,18 @@ try {
     assert.ok(j.queued.resetsAt > nowSec(), 'the queued job names a future resetsAt');
   }
 
-  // why: C-05; restoring the ceiling drains the queue, never past the concurrency cap.
   assert.equal((await api('PUT', '/api/settings', { ceilings: { fiveHour: 0.8 } })).status, 200);
   const cap = (await api('GET', '/api/settings')).body.maxConcurrent;
   await until(async () => (await runs()).some((j) => j.status !== 'queued'));
   const started = (await runs()).filter((j) => j.status !== 'queued');
   assert.ok(started.length >= 1 && started.length <= cap, `at most ${cap} jobs run, saw ${started.length}`);
 
-  // why: S-03; a limit hit in a -p job pauses the queue with its reset time.
   const resetsAt = nowSec() + 3600;
   writeFileSync(limitFlag, JSON.stringify({ type: 'rejected', resetsAt, afterTurns: 0, rateLimitType: 'five_hour' }));
   assert.equal((await api('POST', '/api/cards/k1/shape')).status, 200);
   const paused = await until(async () => (await state()).queue.pauses.find((p) => p.reason === 'limit'));
   assert.deepEqual(paused, { reason: 'limit', rateLimitType: 'five_hour', resetsAt });
 
-  // why: S-08; a failed fetch holds the queue and the next success lifts only that hold.
   const offlineHeld = async () => (await state()).queue.pauses.some((p) => p.reason === 'offline');
   writeFileSync(offlineFlag, '');
   await until(offlineHeld);

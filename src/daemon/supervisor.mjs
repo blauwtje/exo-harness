@@ -6,7 +6,7 @@ import { startSession } from './session.mjs';
 const defaultCaffeinate = () => spawn('caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
 
 export function createSupervisor({
-  store, state, spawnCaffeinate = defaultCaffeinate, onNeedsYou = () => {}, sessionStarter = startSession,
+  store, state, spawnCaffeinate = defaultCaffeinate, onNeedsYou = () => {}, sessionStarter = startSession, admit = () => ({ ok: true }),
 }) {
   const jobs = new Map();
   let caffeine = null;
@@ -75,12 +75,12 @@ export function createSupervisor({
       syncCaffeine();
       throw err;
     }
-    // why: Decision 10; only a session that ended on its own is judged, and only an infrastructure failure or a repeated line is acted on, never a stop, limit hit or model error.
     const settle = async () => {
       for (;;) {
         const end = await entry.sess.done;
         const kind = end.reason ? null : classifyEnd(job, entry.events);
-        if (kind !== 'infra' && kind !== 'loop') return end;
+        const endedOnInfrastructureFailure = kind === 'infra' || kind === 'loop';
+        if (!endedOnInfrastructureFailure) return end;
         (job.failures ??= []).push(failingLine(entry.events));
         const next = nextRetry(job);
         if (!next.retry) {
@@ -91,9 +91,10 @@ export function createSupervisor({
         store.save(state);
         await new Promise((r) => setTimeout(r, next.waitMs));
         if (entry.stopped) return { ...end, reason: 'stopped' };
-        // why: a stream that got as far as init holds its session id, so the retry resumes it instead of reusing the id.
-        const started = opts.mode === 'resume' || entry.events.some((e) => e?.type === 'system');
-        try { await begin(started ? 'resume' : 'start'); } catch { return end; }
+        const retryAdmission = admit(job);
+        if (!retryAdmission.ok) return { ...end, reason: 'deferred', verdict: retryAdmission };
+        const streamReachedInitWithSessionId = opts.mode === 'resume' || entry.events.some((e) => e?.type === 'system');
+        try { await begin(streamReachedInitWithSessionId ? 'resume' : 'start'); } catch { return end; }
       }
     };
     const done = settle().then((end) => {

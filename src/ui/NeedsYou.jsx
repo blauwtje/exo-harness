@@ -109,7 +109,6 @@ function BriefBody({ item, deck, open }) {
   );
 }
 
-// why: Decisions 7 and 12; a budget raise waits for Approve or Reject, and overage is lifted only by its own Allow.
 function NeedBody({ item, deck }) {
   const n = item.need;
   if (n.kind === 'overage') {

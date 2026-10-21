@@ -23,7 +23,6 @@ ${body}`);
   return claude;
 };
 
-// why: a claude that emits one rate_limit_event carrying overage and idles, so a running -p job reports overage.
 const overageBody = `const rl = require('node:readline').createInterface({ input: process.stdin });
 const out = (o) => console.log(JSON.stringify(o));
 out({ type: 'system', subtype: 'init', cwd: process.cwd(), apiKeySource: 'none', permissionMode: 'default', model: 'm', claude_code_version: '1', plugins: [{ name: 'exo', version: '0.136.0' }] });

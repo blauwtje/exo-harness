@@ -44,3 +44,9 @@ test('S-09 an exo run no-progress stop shows its Reason', () => {
   assert.equal(card.reason, 'no progress after 3 attempts');
   assert.equal(runStopCard('Reason: done'), null);
 });
+
+test('F-4-10 an overloaded_error that ends in an is_error result is infra, not a model error', () => {
+  const overloaded = { type: 'assistant', error: 'api_error', message: { content: [{ type: 'text', text: 'overloaded_error' }] } };
+  assert.equal(classifyEnd({}, [overloaded, { type: 'result', is_error: true }]), 'infra');
+  assert.equal(classifyEnd({}, [{ type: 'result', is_error: true }]), 'model-error');
+});

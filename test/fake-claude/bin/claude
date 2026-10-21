@@ -17,8 +17,6 @@ if (args[0] === 'auth' && args[1] === 'status') {
   process.exit(0);
 }
 
-// FAKE_CLAUDE_LIMIT: JSON {type:'rejected'|'usage_limit_reached', resetsAt, afterTurns, rateLimitType}.
-// Reads afterTurns user messages, emits the limit event, exits 1.
 if (process.env.FAKE_CLAUDE_LIMIT) {
   const { type, resetsAt, afterTurns = 0, rateLimitType = 'five_hour' } = JSON.parse(process.env.FAKE_CLAUDE_LIMIT);
   const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
@@ -33,7 +31,6 @@ if (process.env.FAKE_CLAUDE_LIMIT) {
   process.exit(1);
 }
 
-// FAKE_CLAUDE_FAIL: 'noresult' ends the stream with no result event; 'overloaded' emits an overloaded_error. Both exit 1.
 if (process.env.FAKE_CLAUDE_FAIL) {
   const kind = process.env.FAKE_CLAUDE_FAIL;
   const out = (e) => process.stdout.write(`${JSON.stringify(e)}\n`);

@@ -12,7 +12,6 @@ const git = (cwd, args) =>
 const text = (path) => readFile(path, 'utf8').catch(() => '');
 const lines = (s) => s.split('\n').filter(Boolean);
 
-// why: S-16; a gate line already closed is not open, every other line is, so a card never hides one behind another.
 export const gateLines = (text) => lines(text).filter((l) => !/^-\s*(closed|resolved|approved|done):/i.test(l));
 export const isLimitLine = (l) => /(usage|rate)[ _-]limit|limit (reached|hit)/i.test(l);
 

@@ -1,4 +1,3 @@
-// why: a limit hit pauses the queue until the window resets (Decision 9); resetsAt is epoch seconds, as the CLI reports it.
 export function detectLimit(event) {
   const info = event?.type === 'rate_limit_event' ? event.rate_limit_info : null;
   if (info?.status === 'rejected') {
@@ -14,15 +13,14 @@ export function detectLimit(event) {
 const defaultJitter = () => 5000 + Math.floor(Math.random() * 55001);
 
 export function createLimitTimer({ queue, now = Date.now, setTimer = setTimeout, jitterMs = defaultJitter }) {
-  // why: one timer generation per window, so a later hit on another window leaves the first window's timer armed.
-  const generation = new Map();
+  const timerGenerationByWindow = new Map();
   function schedule(type, resetsAt) {
-    const mine = (generation.get(type) ?? 0) + 1;
-    generation.set(type, mine);
+    const mine = (timerGenerationByWindow.get(type) ?? 0) + 1;
+    timerGenerationByWindow.set(type, mine);
     if (typeof resetsAt !== 'number') return;
     const delay = Math.max(0, resetsAt * 1000 + jitterMs() - now());
     setTimer(() => {
-      if (mine === generation.get(type)) queue.resume('limit', type);
+      if (mine === timerGenerationByWindow.get(type)) queue.resume('limit', type);
     }, delay);
   }
   return {
@@ -30,7 +28,6 @@ export function createLimitTimer({ queue, now = Date.now, setTimer = setTimeout,
       queue.pause({ reason: 'limit', rateLimitType, resetsAt });
       schedule(rateLimitType, resetsAt);
     },
-    // why: after a restart the pause is read back from state.json and its timer must be armed again.
     restore() {
       for (const p of queue.snapshot().pauses) if (p.reason === 'limit') schedule(p.rateLimitType ?? null, p.resetsAt);
     },
