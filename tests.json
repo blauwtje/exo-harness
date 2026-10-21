@@ -4,21 +4,21 @@
     "phase": 2,
     "kind": "feature",
     "title": "Daemon on 127.0.0.1 with Host and Origin checks and a per-launch token; HTTP JSON plus SSE.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-02",
     "phase": 2,
     "kind": "feature",
     "title": "Data dir (S14) with EXO_HARNESS_DATA override; JSON state by tmp plus rename; per-job events.jsonl.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-03",
     "phase": 2,
     "kind": "feature",
     "title": "Data model: project keyed by nameWithOwner plus local path (S10), cards, jobs; one project added by local path.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-04",
@@ -46,14 +46,14 @@
     "phase": 2,
     "kind": "feature",
     "title": "Env scrub (M4 list), silent, with no API key notice.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-08",
     "phase": 2,
     "kind": "feature",
     "title": "init invariants (M4) and version stamps per job (S4).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-09",
@@ -74,49 +74,49 @@
     "phase": 2,
     "kind": "feature",
     "title": "control_request answered by code from the spec permission table; other asks become allow-once or deny cards (M5).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-12",
     "phase": 2,
     "kind": "feature",
     "title": "Shape: detached worktree at origin/<default>, .git/info/exclude, long-lived /exo:spec session (M1).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-13",
     "phase": 2,
     "kind": "feature",
     "title": "Turn classifier and question-card parser for exo's text question shape (question.md), with real and edge-case fixtures (two questions, 1/3 prefix, non-English, no recommendation line); letter buttons, OK, free-text reply (M1).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-14",
     "phase": 2,
     "kind": "feature",
     "title": "Shape done-state: new brief file plus plan-check.mjs --plan <brief> --root <worktree> --loop --run exit 0; workflow-caller framing; build dispatch stops the session; health requires specs = docs or both (M2).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-15",
     "phase": 2,
     "kind": "feature",
     "title": "Live timeline over SSE; raw transcript one click away.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-16",
     "phase": 2,
     "kind": "feature",
     "title": "Stop and Stop all: SIGTERM the process group, SIGKILL after a grace period.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-17",
     "phase": 2,
     "kind": "feature",
     "title": "Restart reconcile with pid, start time and process group (M9), using probe P2 fixtures.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-18",
@@ -137,21 +137,21 @@
     "phase": 2,
     "kind": "feature",
     "title": "Stall detection and caffeinate, no wall timeout (S13).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-21",
     "phase": 2,
     "kind": "feature",
     "title": "Health: claude present, auth, exo loaded and at least the minimum version, tree state.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-22",
     "phase": 2,
     "kind": "feature",
     "title": "Design directions: 2-3 static screenshots of the deck screen; the user picks one before any UI is built.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-2-23",
@@ -165,7 +165,7 @@
     "phase": 2,
     "kind": "feature",
     "title": "Three wrapper eval cases (S3): vague feature asks; specified one-liner does not ask; ok to hand-off starts no build.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-01",
@@ -543,7 +543,7 @@
     "phase": 2,
     "kind": "situation",
     "title": "claude missing, logged out, or authMethod not claude.ai: Blocks spawning, shows the exact fix command",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-02",
@@ -564,7 +564,7 @@
     "phase": 2,
     "kind": "situation",
     "title": "App or daemon crash, Mac sleeps or reboots: Reconciles by pid plus start time, resumes or marks each job, loses no card, leaves no orphan",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-05",
@@ -613,14 +613,14 @@
     "phase": 2,
     "kind": "situation",
     "title": "Unknown or malformed stream event: Logs it raw, keeps the job alive",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-12",
     "phase": 2,
     "kind": "situation",
     "title": "exo not loaded or too old: Shows how to install or update it",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-13",
@@ -634,7 +634,7 @@
     "phase": 2,
     "kind": "situation",
     "title": "init invariant mismatch (M4): Kills the process group before the first tool result is accepted, Needs-you card naming the field",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-15",
@@ -676,7 +676,7 @@
     "phase": 2,
     "kind": "situation",
     "title": "Stalled session (S13): Marks stalled after N quiet minutes; no wall timeout, the user stops it",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-21",
@@ -704,7 +704,7 @@
     "phase": 2,
     "kind": "criterion",
     "title": "Killing the daemon mid-job and restarting it resumes or correctly marks every job, with no lost card or orphaned process.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "C-04",
@@ -732,6 +732,6 @@
     "phase": 2,
     "kind": "criterion",
     "title": "docs/progress.md lets a fresh session continue without asking the user anything.",
-    "status": "fail"
+    "status": "pass"
   }
 ]
