@@ -1,14 +1,20 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { checkAuth } from './auth.mjs';
 import { checkHealth } from './health.mjs';
 import { addCard, addJob, addProject } from './model.mjs';
 import { reconcile } from './reconcile.mjs';
+import { holderDone, startRun } from './exo-run.mjs';
+import { checkCollision, checkProvider, readPlan, runCwd } from './run-guard.mjs';
+import { watchRun } from './run-watch.mjs';
+import { runSetup } from './setup.mjs';
 import { createServer } from './server.mjs';
 import { isDone } from './shape-guard.mjs';
 import { createStore } from './store.mjs';
+import { loadStages } from './stages.mjs';
 import { createSupervisor } from './supervisor.mjs';
 import { FINAL_STATUSES as FINAL } from './usage.mjs';
 import { createWorktree } from './worktree.mjs';
@@ -26,6 +32,9 @@ const ROUTES = [
   ['POST', '/api/projects', 'addProject'],
   ['POST', '/api/cards', 'addCard'],
   ['POST', '/api/cards/:id/shape', 'shape'],
+  ['POST', '/api/cards/:id/approve', 'approve'],
+  ['POST', '/api/cards/:id/reject', 'reject'],
+  ['POST', '/api/jobs/:id/retry', 'retry'],
   ['POST', '/api/jobs/:id/reply', 'reply'],
   ['POST', '/api/jobs/:id/permission', 'permission'],
   ['POST', '/api/jobs/:id/continue', 'continue'],
@@ -74,7 +83,7 @@ export function createApp({
     const brief = turn.class === 'done' ? await isDone(j.worktree, j.startedAt, { pluginRoot }) : null;
     if (!brief) return wait(j, { lastText: turn.text });
     delete j.question;
-    Object.assign(j, { status: 'done', brief });
+    Object.assign(j, { status: 'done', brief, needsYou: { kind: 'brief', options: ['approve', 'reject'] } });
     card.lane = 'Shaped';
     store.save(state);
     (await sessions.get(j.id))?.end();
@@ -123,6 +132,74 @@ export function createApp({
     return health;
   }
 
+  const watchers = new Map();
+  const timers = new Map();
+  const approving = new Set();
+  const projectOf = (card) => state.projects.find((p) => p.key === card.projectKey);
+  const cardOf = (id) => state.cards.find((c) => c.id === id) ?? (() => { throw fail(404, `unknown card: ${id}`); })();
+
+  // why: the deck shows exo's own text and reads the main checkout without touching it (S-17).
+  async function ffRefused(j, project) {
+    if (j.run.phase !== 'refused' || !String(j.run.reason).startsWith('could not fast-forward') || j.needsYou) return;
+    const status = await git('git', ['-C', project.path, 'status', '--porcelain']).then((r) => r.stdout, (e) => String(e.message));
+    Object.assign(j, { status: 'refused', outcome: 'refused', needsYou: { kind: 'refusal', text: j.run.reason, status, options: ['retry'] } });
+    store.save(state);
+  }
+
+  function holderOf(cwd) {
+    const root = join(cwd, '.exo', 'run');
+    const states = [];
+    try {
+      for (const d of readdirSync(root)) states.push(JSON.parse(readFileSync(join(root, d, 'state.json'), 'utf8')));
+    } catch { return null; }
+    return states.find((s) => !holderDone(s)) ?? null;
+  }
+
+  function queue({ j, card, cwd, text }) {
+    const holder = holderOf(cwd);
+    Object.assign(j, { status: 'queued', queued: { text, holder: holder && { id: holder.id, phase: holder.phase, pid: holder.pid } } });
+    store.save(state);
+    const timer = setInterval(() => {
+      if (holderOf(cwd)) return;
+      clearInterval(timer);
+      timers.delete(j.id);
+      startFor(j, card).catch((e) => { j.status = 'crashed'; j.crashReason = e.message; store.save(state); });
+    }, loadStages().stages.run.pollMs);
+    timer.unref();
+    timers.set(j.id, timer);
+    return j;
+  }
+
+  const stopWith = (j, outcome, needsYou) => {
+    Object.assign(j, { status: 'refused', outcome, needsYou });
+    delete j.queued;
+    store.save(state);
+    return j;
+  };
+
+  // why: Decisions 6, 16, 7 and 8 in order; every stop is a card with Retry, never a bug card.
+  async function startFor(j, card) {
+    const project = projectOf(card);
+    const plan = await readPlan(j.brief);
+    const guard = await runCwd({ project: project.path, pluginRoot, worktree: j.worktree, plan });
+    const refuse = (text) => stopWith(j, 'refused', { kind: 'refusal', text, options: ['retry'] });
+    if (guard.refusal) return refuse(guard.text);
+    const { cwd } = guard;
+    const provider = await checkProvider(pluginRoot, cwd);
+    if (!provider.ok) return refuse(provider.text);
+    const setup = cwd === j.worktree ? await runSetup(project, j.worktree, project.path) : { ok: true };
+    if (!setup.ok) return stopWith(j, 'setup', { kind: 'setup', command: setup.command, tail: setup.tail, options: ['retry'] });
+    const res = await startRun({ pluginRoot, cwd, brief: j.brief, parentEnv });
+    if (res.refusal === 'lock') return queue({ j, card, cwd, text: res.text });
+    if (res.refusal) return refuse(res.text);
+    Object.assign(j, { status: 'running', run: { id: res.runId }, runRoot: cwd });
+    for (const k of ['needsYou', 'outcome', 'queued']) delete j[k];
+    card.lane = 'Approved';
+    store.save(state);
+    watchers.set(j.id, watchRun({ job: j, runRoot: cwd, store, state, onChange: (x) => { ffRefused(x, project).catch(() => {}); } }));
+    return j;
+  }
+
   const handlers = {
     state: () => ({ ...state, pending: [...pending.values()] }),
     health: () => reconcileAndCheck(),
@@ -154,6 +231,43 @@ export function createApp({
       store.save(state);
       await launch({ store, state, job: j, card, worktree: wt.path, mode: 'start' });
       return j;
+    },
+    async approve({ id }) {
+      const card = cardOf(id);
+      if (approving.has(id) || state.jobs.some((j) => j.cardId === id && j.stage === 'run' && !FINAL.has(j.status))) throw fail(409, 'card already has a live run');
+      const shaped = state.jobs.findLast((j) => j.cardId === id && j.needsYou?.kind === 'brief');
+      if (!shaped) throw fail(409, 'card has no brief waiting for approval');
+      approving.add(id);
+      try {
+        const branch = (await readPlan(shaped.brief)).branch;
+        const source = await checkCollision(projectOf(card).path, branch);
+        if (source) {
+          const text = `branch ${branch} already exists as a ${source}`;
+          card.collision = { branch, source, text };
+          store.save(state);
+          throw fail(409, text);
+        }
+        delete card.collision;
+        delete shaped.needsYou;
+        const j = addJob(state, { cardId: id, stage: 'run' });
+        Object.assign(j, { status: 'running', worktree: shaped.worktree, brief: shaped.brief, startedAt: Date.now() });
+        store.save(state);
+        return await startFor(j, card);
+      } finally { approving.delete(id); }
+    },
+    reject({ id }) {
+      const card = cardOf(id);
+      const shaped = state.jobs.findLast((j) => j.cardId === id && j.needsYou?.kind === 'brief');
+      if (!shaped) throw fail(409, 'card has no brief waiting for approval');
+      delete shaped.needsYou;
+      store.save(state);
+      return card;
+    },
+    async retry({ id }) {
+      const j = job(id);
+      if (j.stage !== 'run' || !['refusal', 'setup'].includes(j.needsYou?.kind) || approving.has(id)) throw fail(409, 'job has nothing to retry');
+      approving.add(id);
+      try { return await startFor(Object.assign(j, { status: 'running' }), cardOf(j.cardId)); } finally { approving.delete(id); }
     },
     async reply({ id, body }) {
       const j = job(id);
@@ -212,6 +326,8 @@ export function createApp({
       return { port: actual, url, reconciled: auth.ok };
     },
     async close() {
+      for (const t of timers.values()) clearInterval(t);
+      for (const w of watchers.values()) w.stop();
       await supervisor.stopAll();
       await server.close();
     },
