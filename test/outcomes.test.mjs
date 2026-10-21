@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OUTCOMES, classifyOutcome, captureLimitStream, failureInbox, isLimitStream } from '../src/daemon/outcomes.mjs';
+import { OUTCOMES, classifyOutcome, captureLimitStream, failureInbox, isLimitStream, runOutcome, runSummary } from '../src/daemon/outcomes.mjs';
 import { createStore } from '../src/daemon/store.mjs';
 
 const result = (extra) => ({ type: 'result', is_error: false, subtype: 'success', ...extra });
 const rate = (status) => ({ type: 'rate_limit_event', rate_limit_info: { status } });
 
-test('enum lists the nine outcomes', () => {
-  assert.deepEqual(OUTCOMES, ['done', 'question', 'max_turns', 'budget', 'limit', 'auth', 'crashed', 'refused', 'invariant']);
+test('enum lists the ten outcomes', () => {
+  assert.deepEqual(OUTCOMES, ['done', 'question', 'max_turns', 'budget', 'limit', 'auth', 'crashed', 'refused', 'invariant', 'setup']);
 });
 
 test('classifies from the stream', () => {
@@ -51,4 +51,35 @@ test('limit stream is copied to EXO_HARNESS_INBOX, clean stream is not', () => {
   const file = captureLimitStream('j1', events, env);
   assert.deepEqual(readdirSync(dir), ['j1.jsonl']);
   assert.deepEqual(readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)), events);
+});
+
+test('F-3-14 S-05 run outcomes follow the phase and reason', () => {
+  assert.equal(runOutcome({ phase: 'parked' }), 'question');
+  assert.equal(runOutcome({ phase: 'stopped', reason: 'budget: spent $5' }), 'budget');
+  assert.equal(runOutcome({ phase: 'stopped', reason: 'hit --max-turns' }), 'max_turns');
+  assert.equal(runOutcome({ phase: 'stopped', reason: 'other' }), 'crashed');
+  assert.equal(runOutcome({ phase: 'refused' }), 'refused');
+  assert.equal(runOutcome({ phase: 'crashed' }), 'crashed');
+  assert.equal(runOutcome({ phase: 'landed' }), null);
+  assert.equal(runOutcome({ phase: 'passed' }), null);
+});
+
+test('F-3-14 S-05 inbox lists run jobs, not landed ones', () => {
+  const store = createStore(mkdtempSync(join(tmpdir(), 'outcomes-')));
+  store.appendEvent('r2', result());
+  const jobs = [
+    { id: 'r1', cardId: 'c', run: { phase: 'parked' } },
+    { id: 'r2', cardId: 'c', run: { phase: 'landed' } },
+    { id: 'r3', cardId: 'c', outcome: 'setup', run: { phase: 'queued' } },
+    { id: 'r4', cardId: 'c', run: { phase: 'running' } },
+  ];
+  assert.deepEqual(failureInbox({ jobs }, store).map((i) => [i.jobId, i.outcome]), [['r1', 'question'], ['r3', 'setup']]);
+});
+
+test('F-3-14 S-05 summary is the report head plus the last assistant text', () => {
+  const lines = Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n');
+  const asst = (t) => ({ type: 'assistant', message: { content: [{ type: 'text', text: t }] } });
+  const out = runSummary(lines, [asst('first'), asst('last words'), { type: 'user' }]);
+  assert.equal(out, `${lines.split('\n').slice(0, 20).join('\n')}\n\nlast words`);
+  assert.equal(runSummary('', []), '');
 });

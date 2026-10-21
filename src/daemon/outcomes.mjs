@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const OUTCOMES = ['done', 'question', 'max_turns', 'budget', 'limit', 'auth', 'crashed', 'refused', 'invariant'];
+export const OUTCOMES = ['done', 'question', 'max_turns', 'budget', 'limit', 'auth', 'crashed', 'refused', 'invariant', 'setup'];
 
 const DEFAULT_INBOX = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'test', 'fixtures', 'inbox');
 const INBOX_EVENTS = 20;
@@ -19,8 +19,29 @@ export function isLimitStream(events) {
   });
 }
 
+const SUMMARY_HEAD_LINES = 20;
+
+export function runOutcome(run) {
+  if (run?.phase === 'parked') return 'question';
+  if (run?.phase === 'refused') return 'refused';
+  if (run?.phase === 'crashed') return 'crashed';
+  if (run?.phase !== 'stopped') return null;
+  const reason = String(run.reason ?? '');
+  if (reason.startsWith('budget:')) return 'budget';
+  return reason.includes('hit --max-turns') ? 'max_turns' : 'crashed';
+}
+
+export function runSummary(reportMd, lastIterEvents = []) {
+  const head = String(reportMd ?? '').split('\n').slice(0, SUMMARY_HEAD_LINES).join('\n').trim();
+  const last = lastIterEvents.findLast((e) => e?.type === 'assistant');
+  const blocks = last?.message?.content;
+  const text = Array.isArray(blocks) ? blocks.filter((b) => b?.type === 'text').map((b) => b.text).join('\n').trim() : '';
+  return [head, text].filter(Boolean).join('\n\n');
+}
+
 export function classifyOutcome(job, events = []) {
   if (OUTCOMES.includes(job?.outcome)) return job.outcome;
+  if (job?.run) return runOutcome(job.run);
   if (job?.status === 'crashed') return 'crashed';
   const result = events.findLast((e) => e?.type === 'result');
   if (result?.subtype === 'error_max_budget_usd') return 'budget';
