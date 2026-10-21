@@ -17,6 +17,22 @@ if (args[0] === 'auth' && args[1] === 'status') {
   process.exit(0);
 }
 
+// FAKE_CLAUDE_LIMIT: JSON {type:'rejected'|'usage_limit_reached', resetsAt, afterTurns, rateLimitType}.
+// Reads afterTurns user messages, emits the limit event, exits 1.
+if (process.env.FAKE_CLAUDE_LIMIT) {
+  const { type, resetsAt, afterTurns = 0, rateLimitType = 'five_hour' } = JSON.parse(process.env.FAKE_CLAUDE_LIMIT);
+  const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
+  for (let n = 0; n < afterTurns; n++) {
+    const { done } = await lines.next();
+    if (done) break;
+  }
+  const event = type === 'rejected'
+    ? { type: 'rate_limit_event', rate_limit_info: { status: 'rejected', rateLimitType, resetsAt } }
+    : { type: 'assistant', error: 'usage_limit_reached', rateLimitType, resetsAt, message: { role: 'assistant', content: [{ type: 'text', text: 'usage limit reached' }] } };
+  process.stdout.write(`${JSON.stringify(event)}\n`);
+  process.exit(1);
+}
+
 const scenarioPath = process.env.FAKE_CLAUDE_SCENARIO;
 if (!scenarioPath) {
   process.stderr.write('fake claude: FAKE_CLAUDE_SCENARIO is not set\n');
