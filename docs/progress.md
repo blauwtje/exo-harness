@@ -5,5 +5,6 @@
 - Brief: `docs/specs/phase-2-mvp.md` (local only, gitignored), 26 tasks, `plan-check --loop` passes, open points step done (8 assumptions, no open point).
 - 2026-10-21 user answers: silent env scrub (59), no wall timeout for any stage (60), Bash outside-project paths allowed (61), live eval on each stage's own model (62); 48 confirmed.
 - 2026-10-21 senior AI engineer fixes (63-70): exact spec tool lists and wrapper prompt in Task 10, live eval on the production path with `--effort`, $10 spend cap and 200 total-turn cap per job, build guard passes 3 of 3. Notes: `.exo/phase-2/senior-ai-review.md`.
-- Next: phase 3 (`exo run` supervision, gates and approvals). Task 23 design direction is picked (`docs/design/contract-selected.json`).
-- Open: P3 (`exo run` from a linked worktree, Land modes) needs the user's terminal, phase 3. exo-side limit park is a separate exo session, needed by phase 4.
+- Phase 3 (detached `exo run` supervision, gates, approvals) built on 2026-10-21; `node scripts/phase-status.mjs --phase 3` flipped 20 of 21 entries. Decisions 71-92 in `docs/decisions.md`, exo 0.136.0 run facts in `docs/facts.md`.
+- Next: phase 4
+- Open: F-3-01 (`## Probe P3` in `docs/facts.md`) needs `node scripts/probe-p3.mjs` run in the user's terminal (`CLAUDECODE` refusal). exo-side limit park is a separate exo session, needed by phase 4.

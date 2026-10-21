@@ -179,91 +179,91 @@
     "phase": 3,
     "kind": "feature",
     "title": "Approve brief starts exo run --detach <plan> in the card's worktree with --max-run-usd and --max-budget-usd; env scrub adds CLAUDECODE and CLAUDE_CODE_*; exo run config provider check (M4, X2).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-03",
     "phase": 3,
     "kind": "feature",
     "title": "Branch-name collision check at Approve (S15).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-04",
     "phase": 3,
     "kind": "feature",
     "title": "Worktree setup step from the lockfile, per-project override, .env* copy per exo env setting (S7).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-05",
     "phase": 3,
     "kind": "feature",
     "title": "state.json polled at 1 s with pid liveness; lock and dirty-tree refusals shown; job queued behind the lock.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-06",
     "phase": 3,
     "kind": "feature",
     "title": "exo run timeline from iter-*.log with the same parser; init check per log (S6, M4).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-07",
     "phase": 3,
     "kind": "feature",
     "title": "Parked run becomes a gate card with diff stat, per-file diff, report.md head, denied.txt; Approve calls exo approve <id> (S9).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-08",
     "phase": 3,
     "kind": "feature",
     "title": "Final phases: bug card with Reason: and resume, retry or discard; dead pid with non-final phase gets one --resume (X1).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-09",
     "phase": 3,
     "kind": "feature",
     "title": "Archive run evidence on final phase (M10); removal only through remove-worktree.mjs --kept.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-10",
     "phase": 3,
     "kind": "feature",
     "title": "Find cause stage: long-lived session shape (M1) and its permission table (M5).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-11",
     "phase": 3,
     "kind": "feature",
     "title": "Conflict route: parked job lists conflicting files, offers Find cause or manual.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-12",
     "phase": 3,
     "kind": "feature",
     "title": "Main checkout fast-forward refusal shown as a card (M3).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-13",
     "phase": 3,
     "kind": "feature",
     "title": "exo repo exception: runs from its main checkout with Land: local.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-3-14",
     "phase": 3,
     "kind": "feature",
     "title": "Failure inbox and outcomes cover exo runs (S5); card summary from report.md head and last message (X4).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-01",
@@ -571,21 +571,21 @@
     "phase": 3,
     "kind": "situation",
     "title": "exo run parked / stopped / crashed / refused: Shows report.md and the reason; parked becomes a gate card, the others a bug card with resume, retry or discard",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-06",
     "phase": 3,
     "kind": "situation",
     "title": "Merge or rebase conflict: Parks the job with the conflicting files, offers a find-cause or manual route",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-07",
     "phase": 3,
     "kind": "situation",
     "title": "Dirty tree or another run holds the lock: Shows exo's refusal text, queues the job behind the lock",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-08",
@@ -655,21 +655,21 @@
     "phase": 3,
     "kind": "situation",
     "title": "Main checkout fast-forward refused (M3): Shows exo's refusal and the main checkout's local edits as a card; touches nothing there",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-18",
     "phase": 3,
     "kind": "situation",
     "title": "Worktree missing deps (S7): Runs the setup step before the job; a setup failure is a setup card, not a code bug card",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-19",
     "phase": 3,
     "kind": "situation",
     "title": "Branch-name collision (S15): Caught at Approve, shown on the card, not queued",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-20",
@@ -711,7 +711,7 @@
     "phase": 3,
     "kind": "criterion",
     "title": "From card to approved brief to a landed exo run takes no more than 3 clicks plus approvals.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "C-05",

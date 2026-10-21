@@ -50,7 +50,17 @@ Environment: macOS, Node v24.22.0, `claude` 2.1.305 at `~/.local/bin/claude`, `e
 - Gates: `gates.md` lines `- open: land: <action> (<reason>)`; `exo approve <id>` approves all open gates and resumes.
 - No `exo --version` and no minimum-version check; version is in `package.json` / `plugin.json`.
 - `budget` values: `fast`, `balanced`, `quality`, and `off`. `settings.mjs set` writes only `--scope project|local`.
-- Open, not yet read: whether `exo run` makes its own worktree or runs `git switch` in the checkout; `lib/settings-store.mjs`, `land-run.mjs`, `run-tail.mjs`. Settle in phase 3.
+- `Land:` in a plan's `## Plan basis` must match `/^Land: (local|pr|push-main)$/m` (`lib/plan-tasks.mjs:261`); `Land:` is optional for a run plan (`plan-check.mjs:386`). `Land gate:` is `/^Land gate: (.+)$/m`.
+- `exo run` makes no worktree and runs no `git switch` for the branch itself. When the runRoot is a linked worktree, `land-run.mjs` is not in place (`inPlace` = runRoot equals the checkout root, `land-run.mjs:115`). For `Land: local` it rebases, re-checks and squashes in the runRoot, then needs the main checkout clean (`status --porcelain --untracked-files=no`) and on the base branch, else parks with gate `main checkout dirty or not on the default branch`.
+- In place (run started from the main checkout), `land-run.mjs:185` runs `git switch <base>`; failure parks with reason `cannot switch to <base>` (action `switch <root> to <base>`), after the squash. `exo approve` only repeats the switch (phase 3 decision 92 finishes it from the deck).
+- Gate lines in `gates.md`: `- <status>: <source>: <action> (<reason>)`, status `open` or `used` (`run-state.mjs` `GATE_LINE`); land gates have source `land`. Other land reasons: `no branch`, `unknown Land mode`, `no Commit: line`, `bad Commit: line`, `rebase conflict`, `re-check failed after rebase: <check>`, `push of <branch> failed`.
+- Fast-forward refusal: `refused: could not fast-forward <base> to origin/<base>: <error>` (`exo-cli.mjs:157`), also `refused: <base> and origin/<base> have diverged; ...`. The run ends `refused` with that text as `reason`.
+- `env` setting (`skills/configure/schema.json`): `ask` (default), `copy`, `never`; whether a run copies the main checkout's local env files into its worktree. Read from `.claude/exo.local.json`, then `.claude/exo.json`.
+- No exo setup step for a project: `exo setup` only installs the `exo` launcher (`exo-cli.mjs:180`). Installing dependencies in a new worktree is the deck's job.
+- Iter logs: `<runRoot>/.exo/run-plan/<plan basename>/<utc stamp>/iter-<n>-task-<n>.log`, also `iter-<n>-plan.log` and `iter-<n>-repair-<k>.log` (`run-plan.mjs:257,470,600,683`).
+- `remove-worktree.mjs` exit codes: 0 removed (prints a report), 1 a `RemoveWorktreeError` (removed nothing, e.g. report or patch absent, kept dir move failed), 2 usage error; messages go to stderr as `remove-worktree: <message>`.
+- `exo run config` with no argument prints one `<key> = <json> (run.json|catalog)` line per leaf, so the provider line is `defaults.provider = "claude" (catalog)` by default (`exo-cli.mjs:236`).
+- `report.md` (`exo-cli.mjs:368`) carries `Reason: <reason>` (newlines folded) only for phases `refused`, `stopped` and `crashed`; `exo wait` prints `Reason:` then `Next:` (`exo-cli.mjs:569`).
 
 ## Libraries (verify_first 5)
 
