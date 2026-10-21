@@ -58,6 +58,22 @@ test.describe('gauges and frame', () => {
     await expect(page.locator('.arc-fill')).toHaveCount(0);
     await expect(page.locator('.crew')).toHaveCount(0);
   });
+
+  test('one failed state load recovers without a new server event', async ({ page }) => {
+    t = await boot();
+    const { project } = await withCards(t, ['First']);
+    await page.goto(t.deckUrl);
+    const linkState = page.locator('.linkstate');
+    await expect(linkState).toHaveText('Connected');
+    await expect(lane(page, 'Inbox')).toContainText('First');
+    let loads = 0;
+    await page.route('**/api/state', (route) => (loads++ === 0 ? route.abort() : route.continue()));
+    await t.api('POST', '/api/cards', { projectKey: project.key, title: 'Second' });
+    await expect.poll(() => loads).toBeGreaterThan(0);
+    expect((await stateOf(t)).cards).toHaveLength(2);
+    await expect(linkState).toHaveText('Connected');
+    await expect(lane(page, 'Inbox')).toContainText('Second');
+  });
 });
 
 test.describe('lanes and cards', () => {

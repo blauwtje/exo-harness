@@ -13,6 +13,7 @@ export function useDeck(token) {
   const [link, setLink] = useState(token ? 'connecting' : 'no-token');
   const [error, setError] = useState(null);
   const loaded = useRef(new Map());
+  const retry = useRef({ timer: null, delay: 0 });
 
   const loadTranscript = useCallback(async (id) => {
     if (!api || loaded.current.has(id)) return;
@@ -36,11 +37,18 @@ export function useDeck(token) {
     if (!api) return;
     try {
       const next = await api.state();
+      clearTimeout(retry.current.timer);
+      retry.current.delay = 0;
       setState({ ...EMPTY, ...next });
       setLink((l) => (l === 'live' ? l : 'live'));
       for (const j of next.jobs ?? []) loadTranscript(j.id);
     } catch (e) {
-      setLink(e instanceof ApiError && e.status === 401 ? 'bad-token' : 'down');
+      const badToken = e instanceof ApiError && e.status === 401;
+      setLink(badToken ? 'bad-token' : 'down');
+      if (badToken) return;
+      clearTimeout(retry.current.timer);
+      retry.current.delay = Math.min(retry.current.delay ? retry.current.delay * 2 : 500, 8000);
+      retry.current.timer = setTimeout(refresh, retry.current.delay);
     }
   }, [api, loadTranscript]);
 
@@ -67,7 +75,7 @@ export function useDeck(token) {
     });
     es.onopen = () => { setLink('live'); refresh(); };
     es.onerror = () => setLink((l) => (l === 'bad-token' ? l : 'down'));
-    return () => { clearTimeout(timer); es.close(); };
+    return () => { clearTimeout(timer); clearTimeout(retry.current.timer); es.close(); };
   }, [api, refresh, refreshHealth, loadTranscript]);
 
   const act = useCallback(async (fn) => {
