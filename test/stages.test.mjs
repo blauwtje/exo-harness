@@ -1,6 +1,10 @@
+import { writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadStages, buildArgs, userMessage, runArgs } from '../src/daemon/stages.mjs';
+import { loadStages, buildArgs, userMessage, runArgs, stageWindows, seedP75 } from '../src/daemon/stages.mjs';
 
 const spec = loadStages().stages.spec;
 
@@ -56,7 +60,7 @@ test('buildArgs carries the flags and fills plugin-root', () => {
 
 test('F-3-02 runArgs gives the Decision 7 argv from the run caps', () => {
   const run = loadStages().stages.run;
-  assert.deepEqual(run, { maxRunUsd: 30, maxBudgetUsd: 10, pollMs: 1000 });
+  assert.deepEqual(run, { maxRunUsd: 30, maxBudgetUsd: 10, pollMs: 1000, windows: ['five_hour', 'seven_day'], seedP75: 0.1 });
   assert.deepEqual(runArgs({ pluginRoot: '/p', brief: '/b/plan.md' }, run), [
     '/p/skills/build/scripts/exo-cli.mjs', 'run', '/b/plan.md', '--detach',
     '--max-run-usd', '30', '--max-budget-usd', '10']);
@@ -78,4 +82,39 @@ test('F-3-10 stages.find-cause is read-only, sonnet, with the spec deny list', (
   const a = buildArgs('find-cause', { sessionId: 's', pluginRoot: '/p' }, 'new');
   assert.equal(a[a.indexOf('--model') + 1], 'sonnet');
   assert.ok(a.includes('Bash(node /p/skills/find-cause/scripts/*)'));
+});
+
+test('F-4-01 every stage names its windows and seed p75 per Decisions 5 and 6', () => {
+  const sonnet = ['five_hour', 'seven_day', 'seven_day_sonnet'];
+  const plain = ['five_hour', 'seven_day'];
+  const want = {
+    spec: [['five_hour', 'seven_day', 'seven_day_opus'], 0.04],
+    build: [sonnet, 0.06], verify: [sonnet, 0.03], 'find-cause': [sonnet, 0.04],
+    ship: [sonnet, 0.02], 'scout-triage': [plain, 0.01], run: [plain, 0.10],
+  };
+  assert.deepEqual(Object.keys(loadStages().stages).sort(), Object.keys(want).sort());
+  for (const [stage, [w, p]] of Object.entries(want)) {
+    assert.deepEqual(stageWindows(stage), w, stage);
+    assert.equal(seedP75(stage), p, stage);
+  }
+  assert.throws(() => stageWindows('nope'), /unknown stage/);
+});
+
+test('F-4-01 new stages use the model, effort and read-only deny list', () => {
+  const { stages } = loadStages();
+  for (const k of ['build', 'verify', 'ship']) {
+    assert.equal(stages[k].model, 'sonnet');
+    assert.equal(stages[k].effort, 'medium');
+    assert.deepEqual(stages[k].disallowedTools, DENY);
+  }
+  assert.equal(stages['scout-triage'].model, 'haiku');
+  assert.equal(stages['scout-triage'].effort, 'low');
+});
+
+test('F-4-01 loadStages refuses a stage without windows', () => {
+  const bad = loadStages();
+  delete bad.stages.build.windows;
+  const file = join(mkdtempSync(join(tmpdir(), 'stages-')), 'stages.json');
+  writeFileSync(file, JSON.stringify(bad));
+  assert.throws(() => loadStages(pathToFileURL(file)), /build has no windows/);
 });

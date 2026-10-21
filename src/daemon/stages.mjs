@@ -2,7 +2,22 @@ import { readFileSync } from 'node:fs';
 
 const configUrl = new URL('../../config/stages.json', import.meta.url);
 
-export const loadStages = () => JSON.parse(readFileSync(configUrl, 'utf8'));
+export function loadStages(url = configUrl) {
+  const config = JSON.parse(readFileSync(url, 'utf8'));
+  for (const [name, s] of Object.entries(config.stages)) {
+    if (!Array.isArray(s.windows) || s.windows.length === 0) throw new Error(`stage ${name} has no windows`);
+  }
+  return config;
+}
+
+const stageOf = (stage) => {
+  const s = loadStages().stages[stage];
+  if (!s) throw new Error(`unknown stage: ${stage}`);
+  return s;
+};
+
+export const stageWindows = (stage) => stageOf(stage).windows;
+export const seedP75 = (stage) => stageOf(stage).seedP75;
 
 const fill = (tools, pluginRoot) => tools.map((t) => t.replaceAll('<plugin-root>', pluginRoot));
 
