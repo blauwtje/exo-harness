@@ -43,6 +43,24 @@ function Ledger({ events, job }) {
   );
 }
 
+function LedgerRows({ rows }) {
+  return (
+    <section className="ledger ledger-rows" aria-labelledby="rows-h">
+      <h2 id="rows-h" className="section-h">Ledger rows</h2>
+      <ol>
+        {rows.map((r) => (
+          <li key={r.at} className="ledger-row" data-idle={r.idleCacheWrite || undefined}>
+            <span className="num">{new Date(r.at).toLocaleTimeString('en-GB')}</span>
+            <span className="num">{fmt(r.input)} in, {fmt(r.output)} out, {fmt(r.cacheRead)} read, {fmt(r.cacheCreation1h)} + {fmt(r.cacheCreation5m)} write</span>
+            <span className="num">{usd(r.costUsd)} <small>estimate</small></span>
+            {r.idleCacheWrite ? <span className="idle-flag">idle cache write</span> : null}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 // why: Decision 18; a run job's own state comes from exo's state.json, not from a session transcript.
 function RunFields({ run }) {
   const v = (x) => (x == null || x === '' ? '—' : String(x));
@@ -141,6 +159,7 @@ export default function JobView({ job, card, events, deck, back }) {
         <div className="job-side">
           {job.run ? <RunFields run={job.run} /> : null}
           <Ledger events={events} job={job} />
+          {job.ledger?.length ? <LedgerRows rows={job.ledger} /> : null}
           {job.status === 'waiting' && job.stage !== 'run' ? <Reply onSend={(t) => deck.act((api) => api.reply(job.id, t))} /> : null}
         </div>
       </div>

@@ -8,6 +8,7 @@ import { isLive, needsYou } from './derive.js';
 import Board from './Board.jsx';
 import CrewPanel from './CrewPanel.jsx';
 import Gauges from './Gauges.jsx';
+import Queue from './Queue.jsx';
 import JobView from './JobView.jsx';
 import NeedsYou from './NeedsYou.jsx';
 import Settings from './Settings.jsx';
@@ -169,6 +170,7 @@ export default function App() {
     if (jobId) return <main className="center"><section className="failed"><p>That job isn't in the daemon's state.</p><button className="link" onClick={back}>Back to board</button></section></main>;
     return (
       <main className="center">
+        <Queue state={state} deck={deck} />
         <NeedsYou items={items} deck={deck} openJob={openJob} />
         <Board state={state} project={project} deck={deck} openJob={openJob} addCard={() => setDialog('card')} setFocusCard={setFocusCard} />
       </main>
@@ -184,7 +186,7 @@ export default function App() {
             {job ? <p className="h1">{project?.key ?? 'exo deck'}</p> : <h1>{project?.key ?? 'exo deck'}</h1>}
             <span className="dim path">{pathText()}</span>
           </div>
-          <Gauges rate={rate} offline={shownLink === 'down'} />
+          <Gauges rate={rate} offline={shownLink === 'down'} state={state} api={deck.api} />
           <div className="top-end">
             <span className="linkstate" data-link={shownLink} role="status"><i aria-hidden="true" />{linkText}</span>
             <button className="btn btn-edge" aria-pressed={settingsOpen} onClick={() => { location.hash = '#/settings'; }}>Settings</button>

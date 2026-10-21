@@ -57,6 +57,8 @@ export function createApi(token) {
     getSettings: () => call('GET', '/api/settings'),
     putSettings: (patch) => call('PUT', '/api/settings', patch),
     setBudget: (projectKey, value) => call('POST', '/api/budget', { projectKey, value }),
+    reorderQueue: (ids) => call('POST', '/api/queue/reorder', { ids }),
+    resumeQueue: () => call('POST', '/api/queue/resume', {}),
     allowOverage: () => call('POST', '/api/overage/allow', {}),
     events: () => new EventSource(`/events?token=${encodeURIComponent(token)}`),
   };
