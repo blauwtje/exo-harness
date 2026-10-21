@@ -1,0 +1,8 @@
+**1/1 Welke taal moet de begroeting hebben?**
+De code is een kleine bibliotheek.
+
+- **(A) Nederlands**: "Hallo, naam!" voor gebruikers.
+- **(B) Engels**: "Hello, naam!" voor anderen.
+
+Aanbevolen: (A), omdat het past.
+Recommended: (B), omdat dat de standaard is.

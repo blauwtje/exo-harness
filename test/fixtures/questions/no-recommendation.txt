@@ -1,0 +1,4 @@
+**1/1 What should happen on empty input?**
+
+- **(A) Error**: throw.
+- **(B) Default**: use "world".

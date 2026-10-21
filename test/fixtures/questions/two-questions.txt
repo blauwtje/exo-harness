@@ -1,0 +1,14 @@
+**1/2 Which output format?**
+Pick one.
+
+- **(A) JSON**: machine readable.
+- **(B) Text**: human readable.
+
+Recommended: (B), because it is simpler.
+
+**2/2 Where should it be written?**
+
+- **(A) Stdout**: print it.
+- **(B) File**: write to disk.
+
+Recommended: (A), because pipes work.

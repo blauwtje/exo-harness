@@ -1,0 +1,5 @@
+**1/3 Which scope?**
+- **(A) Small**: one file.
+- **(B) Large**: many files.
+
+Recommended: (A), because it is cheap.

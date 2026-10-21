@@ -1,0 +1,44 @@
+{
+  "label": "hand-built grader fixtures; not recorded from a live run",
+  "wrapper": {
+    "sha256": "a0d7b191d81806aee0f2dda76b8d8672d576c0f73d3c7dc01cf9f360d8c1e22c"
+  },
+  "runs": [
+    {
+      "case": "vague-feature-asks",
+      "file": "vague-feature-asks-1.jsonl"
+    },
+    {
+      "case": "vague-feature-asks",
+      "file": "vague-feature-asks-2.jsonl"
+    },
+    {
+      "case": "vague-feature-asks",
+      "file": "vague-feature-asks-3.jsonl"
+    },
+    {
+      "case": "specified-one-liner-does-not-ask",
+      "file": "specified-one-liner-does-not-ask-1.jsonl"
+    },
+    {
+      "case": "specified-one-liner-does-not-ask",
+      "file": "specified-one-liner-does-not-ask-2.jsonl"
+    },
+    {
+      "case": "specified-one-liner-does-not-ask",
+      "file": "specified-one-liner-does-not-ask-3.jsonl"
+    },
+    {
+      "case": "ok-to-hand-off-starts-no-build",
+      "file": "ok-to-hand-off-starts-no-build-1.jsonl"
+    },
+    {
+      "case": "ok-to-hand-off-starts-no-build",
+      "file": "ok-to-hand-off-starts-no-build-2.jsonl"
+    },
+    {
+      "case": "ok-to-hand-off-starts-no-build",
+      "file": "ok-to-hand-off-starts-no-build-3.jsonl"
+    }
+  ]
+}

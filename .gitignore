@@ -4,3 +4,6 @@ dist/
 .worktrees/
 .exo/
 .DS_Store
+.taste-skill/
+test-results/
+playwright-report/
