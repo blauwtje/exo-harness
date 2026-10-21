@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+// Fake claude: replays probe fixtures per the scenario in FAKE_CLAUDE_SCENARIO.
+// Scenario JSON: {"steps":[{"emit":"p3a-spec.jsonl","from":0,"to":5},{"await":"user"|"control_response"},
+//   {"write":{"path":"rel/file","content":"x"}},{"spawn":{"seconds":30,"pidFile":"pid.txt"}},{"exit":0}]}
+// Fixture names resolve in test/fixtures/probes; paths are relative to the cwd.
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const probes = resolve(dirname(fileURLToPath(import.meta.url)), '../../fixtures/probes');
+const args = process.argv.slice(2);
+
+if (args[0] === 'auth' && args[1] === 'status') {
+  process.stdout.write(readFileSync(resolve(probes, 'p0-auth-status.json')));
+  process.exit(0);
+}
+
+const scenarioPath = process.env.FAKE_CLAUDE_SCENARIO;
+if (!scenarioPath) {
+  process.stderr.write('fake claude: FAKE_CLAUDE_SCENARIO is not set\n');
+  process.exit(2);
+}
+const { steps } = JSON.parse(readFileSync(scenarioPath, 'utf8'));
+const stdin = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
+
+async function awaitMessage(type) {
+  for (;;) {
+    const { value, done } = await stdin.next();
+    if (done) throw new Error(`stdin closed while awaiting ${type}`);
+    if (JSON.parse(value).type === type) return;
+  }
+}
+
+function emit({ emit: name, from = 0, to }) {
+  const lines = readFileSync(resolve(probes, name), 'utf8').split('\n').filter(Boolean);
+  for (const line of lines.slice(from, to)) process.stdout.write(`${line}\n`);
+}
+
+function startSleep({ seconds, pidFile }) {
+  const child = spawn('sleep', [String(seconds)], { stdio: 'ignore' });
+  if (pidFile) writeFileSync(pidFile, String(child.pid));
+}
+
+try {
+  for (const step of steps) {
+    if (step.emit) emit(step);
+    else if (step.await) await awaitMessage(step.await === 'user' ? 'user' : step.await);
+    else if (step.write) {
+      mkdirSync(dirname(resolve(step.write.path)), { recursive: true });
+      writeFileSync(step.write.path, step.write.content);
+    } else if (step.spawn) startSleep(step.spawn);
+    else if ('exit' in step) process.exit(step.exit);
+  }
+} catch (err) {
+  process.stderr.write(`fake claude: ${err.message}\n`);
+  process.exit(1);
+}
+process.exit(0);
