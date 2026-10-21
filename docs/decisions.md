@@ -80,3 +80,21 @@ Each line: the choice, then the reason. User answers live in `request.md`; revie
 56. Probe p7: `--resume` needs an explicit user message and may repeat a side-effecting tool, so the resume message says the last tool may not have finished and to check its effect before repeating a writing command.
 57. Probe p9: a question title carries an `n/total` prefix (`**1/1 ...?**`); the parser reads it and the card shows it.
 58. Probe p8: `FORCE_PROMPT_CACHING_5M` stays unset (and scrubbed) so sessions get the 1-hour TTL; a reply after 10 idle minutes then reads the cached prefix instead of rewriting it.
+
+## Phase 2 (user, 2026-10-21)
+
+59. The env scrub is silent: no API key notice in the terminal or the deck (user). 48 confirmed by the user.
+60. No stage has a wall timeout: a job runs until done, Stop, its turn cap or a usage ceiling; stall only marks a job after 10 quiet minutes (user). Replaces the wall timeouts of 14, 16 and 51.
+61. A Bash `blocked_path` outside the project is allowed, not denied (user). Replaces the deny half of 52.
+62. The live wrapper eval runs on each stage's own model (Opus for `spec`), 3 runs per case, pass at 2 of 3: an eval on another model says nothing about the stage's model.
+
+## Phase 2 (senior AI engineer for the user, 2026-10-21)
+
+63. The `spec` tool lists are pinned in the brief: allowed = `Read`, `Glob`, `Grep`, read-only git subcommands and `node` on `<plugin-root>/skills/spec/scripts/*` and the print-only `skills/route-skills/scripts/next-stage.mjs` only; disallowed = exo's `DENY_RULES` plus `mcp__*`; never `Bash(git:*)` or `Bash(node:*)`, because p6 showed a listed tool skips the daemon, so with 61 these lists are the real boundary.
+64. The wrapper system prompt is the p9 line verbatim, and the resume message of 56 is fixed text; a sha256 of the system prompt plus the user-message template is stored with the eval fixtures, and `npm test` fails when it differs, so no prompt change ships untested.
+65. The live wrapper eval spawns through `session.mjs` with the production `buildArgs`, so it tests the argv that ships (tool lists, prompt, model, effort, scrub).
+66. The `spec` stage sets `effort` `medium` and passes `--effort`; effort is stamped on each job and each eval run, with the `init` model id and the versions.
+67. Each `spec` job gets a spend cap through `--max-budget-usd` (starting value 10); a tripped cap gives outcome `budget`. Amends 60.
+68. The daemon sums `num_turns` across a job's results; at the total-turn cap (starting value 200) it sends no further message and raises a Needs-you card (Continue or Stop), never a kill, because `--max-turns` counts per user message (p9). Amends 60.
+69. `caffeinate` is released when every running job is stalled and taken again on the next event, so one hung job does not keep the Mac awake.
+70. Wrapper eval pass bar: the hand-off case's guard grader must pass 3 of 3 (its prompt-level count is reported as k/3), the other cases 2 of 3; each run ends once graded; the first live runs are saved as the fixtures. Amends the pass bar of 62.

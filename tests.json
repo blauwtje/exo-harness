@@ -45,7 +45,7 @@
     "id": "F-2-07",
     "phase": 2,
     "kind": "feature",
-    "title": "Env scrub (M4 list) and one-time API key notice.",
+    "title": "Env scrub (M4 list), silent, with no API key notice.",
     "status": "fail"
   },
   {
@@ -136,7 +136,7 @@
     "id": "F-2-20",
     "phase": 2,
     "kind": "feature",
-    "title": "Stall detection, wall timeout, caffeinate (S13).",
+    "title": "Stall detection and caffeinate, no wall timeout (S13).",
     "status": "fail"
   },
   {
@@ -549,7 +549,7 @@
     "id": "S-02",
     "phase": 2,
     "kind": "situation",
-    "title": "ANTHROPIC_API_KEY set in the shell: Strips it (and M4's list) from every child including exo run, shows a one-time notice",
+    "title": "ANTHROPIC_API_KEY set in the shell: Strips it (and M4's list) from every child including exo run, silently, with no notice",
     "status": "fail"
   },
   {
@@ -675,7 +675,7 @@
     "id": "S-20",
     "phase": 2,
     "kind": "situation",
-    "title": "Stalled session (S13): Marks stalled after N quiet minutes, then the wall timeout kills the group, outcome timeout",
+    "title": "Stalled session (S13): Marks stalled after N quiet minutes; no wall timeout, the user stops it",
     "status": "fail"
   },
   {

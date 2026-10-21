@@ -28,8 +28,8 @@ Deterministic orchestrator in code, model sessions as workers. Routing, queueing
 - One daemon owns every child, each in its own process group; closing the UI kills nothing.
 - stdout read line by line, every raw line appended to `jobs/<id>/events.jsonl`; known types parsed, unknown or malformed lines logged, shown raw, job kept alive.
 - Interactive stages (`spec`, `find-cause`, `ship`) run as one long-lived `claude -p --input-format stream-json --output-format stream-json --verbose --permission-prompt-tool stdio` process; a reply is the next user message on stdin; `--resume <session-id>` only when the process is gone (M1).
-- At each `result`, code classifies the turn: done, question, or other (M1). Each finished job gets one outcome: done, question, max_turns, timeout, limit, auth, crashed, refused, invariant (S5).
-- `caffeinate -i -w <daemon pid>` while any job runs; no event for N minutes marks a job stalled, then the stage wall timeout kills its group (S13, M5).
+- At each `result`, code classifies the turn: done, question, or other (M1). Each finished job gets one outcome: done, question, max_turns, budget, limit, auth, crashed, refused, invariant (S5).
+- `caffeinate -i -w <daemon pid>` while any job runs and is not stalled, released when every running job is stalled; no event for N minutes marks a job stalled; no stage has a wall timeout, so a job runs until done, Stop, its spend cap, a usage ceiling, or its total-turn cap, which pauses it to a Needs-you card (S13, M5).
 - Stop (one job) and Stop all (every group, then queue paused) (M5).
 
 **Persistence**
@@ -50,7 +50,7 @@ Deterministic orchestrator in code, model sessions as workers. Routing, queueing
 - exo repo exception: its runs start from its main checkout, where exo makes its own worktree and `Land: local` works (M3).
 
 **Routing**
-- `config/stages.json` (versioned) sets per stage: model, effort, permission mode, allowed and disallowed tools, max turns, wall timeout. Starting table: Opus `spec`; Sonnet `build`, `verify`, `find-cause`, `ship`; Haiku scout triage.
+- `config/stages.json` (versioned) sets per stage: model, effort, permission mode, allowed and disallowed tools, max turns. Starting table: Opus `spec`; Sonnet `build`, `verify`, `find-cause`, `ship`; Haiku scout triage.
 - The harness picks only the top-level model; exo's `budget` setting routes helpers. The budget dial writes `--scope local` only (S11).
 - `--append-system-prompt` text is identical for every job of a stage; card text and worktree go in the user message; `--exclude-dynamic-system-prompt-sections` passed; `FORCE_PROMPT_CACHING_5M` left unset for interactive stages (S2).
 - A step moves to a cheaper model only after it passes that step's eval.
@@ -61,7 +61,7 @@ Deterministic orchestrator in code, model sessions as workers. Routing, queueing
 - Admission: current utilization plus the stage's p75 projected change stays under the ceiling (80% of 5-hour, 70% of week) (S1).
 - Hard stop at 92% of the 5-hour window: exo runs are stopped at the next task boundary (`landed` rises, then SIGTERM), resumable from `Plan-task:` commits (S1).
 - Overage active (`isUsingOverage` true, or `overageStatus` not `rejected`) admits no new job and drains running ones until the user flips an explicit toggle (M7).
-- `-p` jobs get `--max-turns` plus a wall timeout; exo runs get `--max-run-usd` and `--max-budget-usd` (X2). `costUsd` is labeled an estimate everywhere.
+- `-p` jobs get `--max-turns` (per user message), `--max-budget-usd`, a daemon-side total-turn cap and no wall timeout; exo runs get `--max-run-usd` and `--max-budget-usd` (X2). `costUsd` is labeled an estimate everywhere.
 - Per turn, cache read and write tokens recorded; a large cache write after an idle gap is flagged (S2).
 
 **Queue**
@@ -107,7 +107,7 @@ Each row is a required behavior with a fixture-driven test (fake `claude`, fake 
 | id | Situation | App does | Phase |
 |---|---|---|---|
 | S-01 | `claude` missing, logged out, or `authMethod` not `claude.ai` | Blocks spawning, shows the exact fix command | 2 |
-| S-02 | `ANTHROPIC_API_KEY` set in the shell | Strips it (and M4's list) from every child including `exo run`, shows a one-time notice | 2 |
+| S-02 | `ANTHROPIC_API_KEY` set in the shell | Strips it (and M4's list) from every child including `exo run`, silently, with no notice | 2 |
 | S-03 | Limit hit mid-job | Pauses the queue, records the reset time, resumes on its own after the reset | 4 |
 | S-04 | App or daemon crash, Mac sleeps or reboots | Reconciles by pid plus start time, resumes or marks each job, loses no card, leaves no orphan | 2 |
 | S-05 | exo run `parked` / `stopped` / `crashed` / `refused` | Shows `report.md` and the reason; parked becomes a gate card, the others a bug card with resume, retry or discard | 3 |
@@ -125,7 +125,7 @@ Each row is a required behavior with a fixture-driven test (fake `claude`, fake 
 | S-17 | Main checkout fast-forward refused (M3) | Shows exo's refusal and the main checkout's local edits as a card; touches nothing there | 3 |
 | S-18 | Worktree missing deps (S7) | Runs the setup step before the job; a setup failure is a setup card, not a code bug card | 3 |
 | S-19 | Branch-name collision (S15) | Caught at Approve, shown on the card, not queued | 3 |
-| S-20 | Stalled session (S13) | Marks stalled after N quiet minutes, then the wall timeout kills the group, outcome `timeout` | 2 |
+| S-20 | Stalled session (S13) | Marks stalled after N quiet minutes; no wall timeout, the user stops it | 2 |
 | S-21 | Clone delete with local-only work (M11) | Lists uncommitted, ignored, stashed, unpushed, worktrees and live runs; approval; folder to Trash | 5 |
 
 ## Phases
@@ -152,7 +152,7 @@ Riskiest parts end to end: one project, manual cards, Shape to a real `spec` ses
 - F-2-04 `gh` wrapper with allowlist and the source check in `npm test` (M6).
 - F-2-05 Fake `claude` replaying fixtures; `--fixtures` is the only mode allowed under `CLAUDECODE`.
 - F-2-06 Auth guard: `claude auth status --json` before the first spawn per launch.
-- F-2-07 Env scrub (M4 list) and one-time API key notice.
+- F-2-07 Env scrub (M4 list), silent, with no API key notice.
 - F-2-08 `init` invariants (M4) and version stamps per job (S4).
 - F-2-09 Stream parser: known types, unknown passthrough, malformed lines logged.
 - F-2-10 `config/stages.json` with the `spec` entry; explicit `--permission-mode`; stable system prompt, `--exclude-dynamic-system-prompt-sections` (S2).
@@ -165,7 +165,7 @@ Riskiest parts end to end: one project, manual cards, Shape to a real `spec` ses
 - F-2-17 Restart reconcile with pid, start time and process group (M9), using probe P2 fixtures.
 - F-2-18 Outcome enum, failure inbox list, limit-stream capture to `test/fixtures/inbox/` (S5).
 - F-2-19 `rate_limit_event` parsing including overage fields (M7 parse) and cache token fields (S2).
-- F-2-20 Stall detection, wall timeout, `caffeinate` (S13).
+- F-2-20 Stall detection and `caffeinate`, no wall timeout (S13).
 - F-2-21 Health: `claude` present, auth, exo loaded and at least the minimum version, tree state.
 - F-2-22 Design directions: 2-3 static screenshots of the deck screen; the user picks one before any UI is built.
 - F-2-23 Board (one project, manual cards) and job view in the picked direction, React 19 plus Vite.
@@ -178,7 +178,7 @@ Live check (user's terminal, a scratch clone as the project):
 cd /Users/thomash/Documents/Code/personal/exo-harness
 ANTHROPIC_API_KEY=sk-ant-dummy npm start -- --live-check
 ```
-Expect: the one-time API key notice; a printed `http://127.0.0.1:<port>/#token=...` URL; add the project, add a card, click Shape; the timeline streams; the job view shows `apiKeySource none` and the passed permission mode; `ps eww -o command= -p <child pid> | grep -c ANTHROPIC_API_KEY` prints 0. Press Ctrl-C mid-job, rerun the command: the job resumes or is marked, no `claude` orphan in `ps`. Stop ends the job.
+Expect: no API key notice; a printed `http://127.0.0.1:<port>/#token=...` URL; add the project, add a card, click Shape; the timeline streams; the job view shows `apiKeySource none` and the passed permission mode; `ps eww -o command= -p <child pid> | grep -c ANTHROPIC_API_KEY` prints 0. Press Ctrl-C mid-job, rerun the command: the job resumes or is marked, no `claude` orphan in `ps`. Stop ends the job.
 
 ### Phase 3: detached exo run supervision, gates and approvals
 
