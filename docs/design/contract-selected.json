@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "task": 23,
+  "direction": {
+    "id": "data-terminal",
+    "seed": 1991593288,
+    "seedFile": ".taste-skill/app/direction.json",
+    "dealtFor": "exo-harness deck: a local board where one developer shapes cards into specs with Claude agent sessions, watches live jobs and answers questions, permissions and failures"
+  },
+  "idea": "A research-terminal for agent work: surfaces darker than the ground, tabular digits that stack, state shown by shape plus a word, and every selection marked by the same 1px line. The one saturated colour (signal orange) is reserved for what needs the person, so the eye finds the Needs-you column first.",
+  "redraws": [
+    {
+      "from": "selection and accent: 1px blue (#4a8ad6)",
+      "to": "selection is a 1px titanium line (#c8ccd4); signal orange (#ff6b2c) is used only for Needs-you items and their primary actions",
+      "why": "The dealt blue made 'selected' and 'needs you' the same loudness. The deck's job is to pull the eye to blocked work, so the single hot colour is spent there and nowhere else."
+    },
+    {
+      "from": "type: Public Sans",
+      "to": "Geist (UI) plus Geist Mono (numbers, ids, raw transcript), both variable, self-hosted via @fontsource-variable",
+      "why": "A devtool needs a real monospace for tokens, ids and the transcript, and a UI face that pairs with it. Self-hosted files keep the deck working offline (OFL-1.1)."
+    },
+    {
+      "from": "radius: control 999 (pills)",
+      "to": "6px everywhere",
+      "why": "Pills read as marketing chrome. Square-ish controls match the terminal feel and the card radius."
+    },
+    {
+      "from": "ground #171719 / surface #131217 / raised #212023",
+      "to": "ground #131417 / panel #0f1013 / raised #1b1d22 (cool graphite, slightly darker)",
+      "why": "Longer sessions on a dark screen, and the status hues needed at least 5.9:1 on every surface; the dealt greys left too little room for that."
+    }
+  ],
+  "type": {
+    "ui": "Geist Variable, system-ui, sans-serif",
+    "mono": "Geist Mono Variable, ui-monospace, monospace",
+    "body": "13px / 1.45, weight 400",
+    "pageTitle": "20px / 26px, weight 500",
+    "numbers": "Geist Mono with tabular-nums, letter-spacing 0, used for counts, tokens, ids, cost, clock times",
+    "notes": "No all-caps tracking on body. Labels are sentence case."
+  },
+  "palette": {
+    "surfaces": { "ground": "#131417", "panel": "#0f1013", "raised": "#1b1d22" },
+    "lines": { "line": "#2a2d34", "lineHi": "#3a3e47" },
+    "text": { "text": "#eceff3", "titanium": "#c8ccd4", "muted": "#9097a2" },
+    "status": { "signal": "#ff6b2c", "run": "#5aa7ee", "ok": "#4cb996", "warn": "#e2b23c", "bad": "#e8749a" },
+    "contrast": {
+      "method": "WCAG 2.x relative luminance, (L1+0.05)/(L2+0.05), computed from the hex values in src/ui/styles.css",
+      "foregroundOn": {
+        "text":     { "ground": 15.97, "panel": 16.49, "raised": 14.62 },
+        "titanium": { "ground": 11.44, "panel": 11.82, "raised": 10.47 },
+        "muted":    { "ground": 6.26,  "panel": 6.46,  "raised": 5.73 },
+        "signal":   { "ground": 6.48,  "panel": 6.7,   "raised": 5.93 },
+        "run":      { "ground": 7.19,  "panel": 7.43,  "raised": 6.58 },
+        "ok":       { "ground": 7.62,  "panel": 7.87,  "raised": 6.98 },
+        "warn":     { "ground": 9.36,  "panel": 9.66,  "raised": 8.56 },
+        "bad":      { "ground": 6.49,  "panel": 6.7,   "raised": 5.94 }
+      },
+      "lines": { "lineOnGround": 1.34, "lineHiOnGround": 1.72 },
+      "result": "All text and status colours are at least 5.73:1 (AA needs 4.5:1; large text 3:1). Hairlines are decorative dividers (1.34:1, 1.72:1); every control also carries a text label or shape, so no control depends on its border alone. Status is shape plus a word, never colour alone."
+    }
+  },
+  "motion": {
+    "easing": { "out": "cubic-bezier(0.22, 1, 0.36, 1)", "inOut": "cubic-bezier(0.76, 0, 0.24, 1)", "exit": "cubic-bezier(0.55, 0.055, 0.675, 0.19)" },
+    "spring": "stiffness 520, damping 48, mass 0.9 for card and lane layout moves (motion layout='position')",
+    "durations": "fade 160ms; popovers, dialogs and tooltips 240ms; hairline colour 180ms",
+    "rules": [
+      "Animate only transform, opacity and colour of hairlines; never width or height.",
+      "Entering cards rise 8px and fade in; leaving needs-you items slide 14px left and fade.",
+      "Count digits drop in 4px when they change.",
+      "Hover effects only on (hover: hover) and (pointer: fine).",
+      "prefers-reduced-motion: reduce collapses every animation and transition to 0.01ms.",
+      "Nothing loops except the three-bar loading indicator."
+    ]
+  },
+  "layout": {
+    "shell": "Project rail 56px (mark, exo name, project tags, needs-you count with label) | centre (flexible) | crew panel 352px at 1280px and wider. Under 1280px the crew panel is a right drawer, closed by default, opened by the Crew button with live count in the top bar. On a job page the crew panel is not shown. Top bar spans centre and crew with project id, usage gauges (a 3px semicircle arc whose bright part is the used fraction over a visible track; no arc when there is no reading or the daemon is disconnected), link state and a neutral Stop all (red only inside its confirm dialog; disabled while disconnected). With no connection or token the crew panel, its divider and the end joint are not drawn",
+    "board": "Needs-you column pinned first (336px, 300px under 1100px), then lanes Inbox, Shaped, Approved, Queued, Running, Review, Done. Empty lanes other than Inbox collapse to a 32px strip and open while dragging. One 1px beam runs across the whole shell from the rail to the crew panel (1280px and wider) and ends in a 12px joint over the crew panel; every lane head has a 12px joint on it (collapsed lanes carry their vertical label on the joint). The frame carries load: a lane that holds cards has a filled joint and a 2px titanium beam, two loaded lanes side by side are bridged, Running adds a second ring while agents work, and the Needs-you joint and beam turn signal orange while anything waits on the person. In the crew panel each strut is a 2px member with a square foot at the agent and at its card, signal-coloured while that agent waits. A finished job on a card reads Job done, because the lane is the card's own state. An empty Inbox fills its lane with one guidance line and Add card. Lanes and Needs-you show a +N more below footer when cards are cut off. Running lists working jobs first, then a Waiting on you sub-divider (count shows working jobs only). Cards carry the id as a plate on the top edge; needs-you cards have a 2px signal left edge only. The board scrolls with x snap; lanes are 168px under 1280px.",
+    "jobView": "Header with card title, status, stage, short id, Stop job. Two columns: tabs (Timeline | Transcript) with a follow-tail toggle, and a ledger side column (280px; under 1100px the ledger becomes a two-column key/value block above the tabs). The ledger heading shares the tab bar row and its rule is capped with a 12px joint; rows keep a constant 44px pitch, the two of which rows are indented and muted, and the Model group is split by a 1px line-hi rule. Timeline dots sit on a 1px vertical spine; only the timeline scrolls, the top bar and rail never move. Stop job is disabled with a Finished hint once the job has ended.",
+    "breakpoints": "1280px turns the crew panel into a drawer; 1100px narrows the Needs-you column to 300px, stacks the job ledger above the timeline and drops the gauge arcs; 640px stacks the top bar and the board columns.",
+    "states": "Loading bars, no-token and bad-token plates (drawn inside the full shell, at the first card row of the board grid, with the link shown as Disconnected), daemon-unreachable with retry and last-update time, no-project first-run, calm empty Needs-you."
+  },
+  "libraries": {
+    "react": "19, UI",
+    "vite": "build to dist/, served by the daemon",
+    "@dnd-kit/react": "card drag; drops map only to existing daemon routes (Inbox to Shaped runs Shape, others snap back with a message)",
+    "@radix-ui": "dialog, dropdown-menu, radio-group, scroll-area, tabs, toggle-group, tooltip: focus, roles and keyboard handled by the primitives",
+    "motion": "layout and presence animation",
+    "@xyflow/react": "crew graph: agents linked to their cards",
+    "@fontsource-variable/geist, geist-mono": "self-hosted fonts",
+    "@playwright/test": "end-to-end tests and screenshots (dev)"
+  },
+  "exoskeletonFit": "The deck is the instrument panel of the exoskeleton: the agents do the work, the person stays in the loop at the points that need judgement. Needs-you comes first and is the only place the signal colour lives; questions, permissions, broken invariants and health failures are answerable in place. Every job shows its ledger (tokens, cache, estimated cost, model, versions) so cost and provenance are never hidden, and Stop and Stop all are always in reach so the person keeps the last word.",
+  "evidence": {
+    "e2e": ["test/e2e/board.spec.mjs", "test/e2e/job-view.spec.mjs"],
+    "screenshots": ["board-1440.png", "board-1024.png", "job-1440.png", "job-1024.png", "board-empty.png", "board-busy.png", "board-error.png"]
+  }
+}
