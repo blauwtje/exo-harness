@@ -44,6 +44,16 @@ export function createApi(token) {
     continueJob: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/continue`, {}),
     stop: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/stop`, {}),
     stopAll: () => call('POST', '/api/stop-all', {}),
+    approve: (id) => call('POST', `/api/cards/${encodeURIComponent(id)}/approve`, {}),
+    reject: (id) => call('POST', `/api/cards/${encodeURIComponent(id)}/reject`, {}),
+    findCause: (id, jobId) => call('POST', `/api/cards/${encodeURIComponent(id)}/find-cause`, jobId === undefined ? {} : { jobId }),
+    retry: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/retry`, {}),
+    finishLand: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/finish-land`, {}),
+    approveGate: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/approve-gate`, {}),
+    rejectGate: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/reject-gate`, {}),
+    resumeRun: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/resume-run`, {}),
+    discard: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/discard`, {}),
+    diff: (id, file) => call('GET', `/api/jobs/${encodeURIComponent(id)}/diff?file=${encodeURIComponent(file)}`),
     events: () => new EventSource(`/events?token=${encodeURIComponent(token)}`),
   };
 }

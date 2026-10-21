@@ -11,7 +11,7 @@ function Row({ label, value, unit, wrong, sub }) {
   return (
     <div className={`ledger-row${sub ? ' ledger-sub' : ''}`} data-wrong={wrong || undefined}>
       <dt>{label}</dt>
-      <dd className="num">{value}{unit && value !== '—' ? <small>{unit}</small> : null}</dd>
+      <dd className="num" title={typeof value === 'string' && value !== '—' ? value : undefined}>{value}{unit && value !== '—' ? <small>{unit}</small> : null}</dd>
     </div>
   );
 }
@@ -38,6 +38,27 @@ function Ledger({ events, job }) {
         <Row label="Effort" value={l.effort ?? '—'} />
         <Row label="Claude Code" value={l.claudeVersion ?? '—'} />
         <Row label="exo plugin" value={l.exoVersion ?? '—'} />
+      </dl>
+    </section>
+  );
+}
+
+// why: Decision 18; a run job's own state comes from exo's state.json, not from a session transcript.
+function RunFields({ run }) {
+  const v = (x) => (x == null || x === '' ? '—' : String(x));
+  return (
+    <section className="ledger" aria-labelledby="run-h">
+      <h2 id="run-h" className="section-h">Run</h2>
+      <dl>
+        <Row label="Run id" value={v(run.id)} />
+        <Row label="Phase" value={v(run.phase)} wrong={['stopped', 'crashed', 'refused'].includes(run.phase)} />
+        <Row label="Stage" value={v(run.stage)} />
+        <Row label="Branch" value={v(run.branch)} />
+        <Row label="Task" value={v(run.task)} />
+        <Row label="Landed" value={v(run.landed)} />
+        <Row label="Total tasks" value={v(run.total)} />
+        <Row label="Reason" value={v(run.reason)} wrong={Boolean(run.reason)} />
+        <Row label="Run root" value={v(run.runRoot)} />
       </dl>
     </section>
   );
@@ -118,8 +139,9 @@ export default function JobView({ job, card, events, deck, back }) {
           </Tabs.Content>
         </Tabs.Root>
         <div className="job-side">
+          {job.run ? <RunFields run={job.run} /> : null}
           <Ledger events={events} job={job} />
-          {job.status === 'waiting' ? <Reply onSend={(t) => deck.act((api) => api.reply(job.id, t))} /> : null}
+          {job.status === 'waiting' && job.stage !== 'run' ? <Reply onSend={(t) => deck.act((api) => api.reply(job.id, t))} /> : null}
         </div>
       </div>
     </section>

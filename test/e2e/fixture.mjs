@@ -54,7 +54,7 @@ const USAGE = ${JSON.stringify(USAGE)};
       fs.writeFileSync('reply.txt', (await next('user')).message.content);
     } else if (step === 'brief') {
       fs.mkdirSync('docs/specs', { recursive: true });
-      fs.writeFileSync('docs/specs/greet.md', '# Greet\\n');
+      fs.writeFileSync('docs/specs/greet.md', '# Greet\\nBranch: greet\\nLand: local\\n');
       say('Brief written: docs/specs/greet.md');
       out(Object.assign({ type: 'result', subtype: 'success', num_turns: 1 }, USAGE));
     }
@@ -80,13 +80,16 @@ export function repo(name = 'deck-repo-') {
   return dir;
 }
 
-export async function boot({ steps = [], init, initFor, seed, claudeMissing = false } = {}) {
+export async function boot({ steps = [], init, initFor, seed, scenario = {}, claudeMissing = false } = {}) {
   const dir = tmp('deck-dir-');
   const dataDir = join(dir, 'data');
   mkdirSync(dataDir, { recursive: true });
   if (seed) writeFileSync(join(dataDir, 'state.json'), JSON.stringify(seed));
+  // why: the fake exo reads its scenario from this file, so a test can drive the run phases.
+  const scenarioFile = join(dir, 'scenario.json');
+  writeFileSync(scenarioFile, JSON.stringify(scenario));
   const claudePath = claudeMissing ? join(dir, 'no-such-claude') : fakeClaude(dir, steps, { init, initFor });
-  const app = createApp({ dataDir, claudePath, pluginRoot: plugin(), distDir: DIST, parentEnv: { ...process.env } });
+  const app = createApp({ dataDir, claudePath, pluginRoot: plugin(), distDir: DIST, parentEnv: { ...process.env, FAKE_EXO_SCENARIO: scenarioFile } });
   const { port, url } = await app.start();
   const token = new URL(url).hash.replace(/^#token=/, '');
   const api = async (method, path, body) => {
@@ -96,7 +99,7 @@ export async function boot({ steps = [], init, initFor, seed, claudeMissing = fa
     return { status: res.status, body: await res.json() };
   };
   return {
-    app, api, token, dir, port,
+    app, api, token, dir, port, scenarioFile,
     deckUrl: `http://127.0.0.1:${port}/#token=${token}`,
     queryUrl: `http://127.0.0.1:${port}/?token=${token}`,
     close: () => app.close(),

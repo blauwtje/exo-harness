@@ -7,7 +7,106 @@ import { shortId } from './derive.js';
 
 const KIND_WORD = {
   permission: 'Permission', question: 'Question', invariant: 'Invariant', 'turn-cap': 'Turn cap', failure: 'Failure', health: 'Health',
+  brief: 'Brief', gate: 'Gate', conflict: 'Conflict', 'run-failed': 'Run failed', setup: 'Setup', refusal: 'Refused', land: 'Land',
 };
+
+const pathTail = (p) => String(p ?? '').split('/').slice(-3).join('/');
+
+// why: Decision 18; the per-file diff loads on click, so a large change never ships in the state payload.
+function GateBody({ item, deck, open }) {
+  const n = item.job.needsYou;
+  const [file, setFile] = useState(null);
+  const [diff, setDiff] = useState('');
+  const [manual, setManual] = useState(false);
+  const show = async (f) => {
+    if (f === file) { setFile(null); return; }
+    setFile(f);
+    setDiff('');
+    const r = await deck.act((api) => api.diff(item.job.id, f));
+    setDiff(r?.diff ?? '');
+  };
+  const conflict = item.kind === 'conflict';
+  return (
+    <>
+      <p className="said">{conflict ? 'The run cannot rebase onto its base. Find the cause, or rebase by hand, then approve.' : 'The run parked at a gate. Review the change, then approve or reject.'}</p>
+      <dl className="kv">
+        <dt>Branch</dt><dd>{item.job.run?.branch ?? '—'}</dd>
+        <dt>Base</dt><dd>{n.base ?? '—'}</dd>
+      </dl>
+      {n.gates?.length ? <ul className="gates">{n.gates.map((g) => <li key={g}>{g.replace(/^-\s*/, '')}</li>)}</ul> : null}
+      {conflict && n.conflicts?.length ? (
+        <div className="fix"><span>Conflicting files</span>{n.conflicts.map((f) => <span key={f} className="fix-file">{f}</span>)}</div>
+      ) : null}
+      {n.diffStat ? <pre className="cmd" aria-label="Diff stat">{n.diffStat.trimEnd()}</pre> : null}
+      {n.files?.length ? (
+        <ul className="files" aria-label="Changed files">
+          {n.files.map((f) => (
+            <li key={f}><button className="link" aria-pressed={file === f} onClick={() => show(f)}>{f}</button></li>
+          ))}
+        </ul>
+      ) : null}
+      {file ? <pre className="cmd cmd-diff" aria-label={`Diff of ${file}`}>{diff || 'Loading the diff…'}</pre> : null}
+      {n.reportHead ? <pre className="cmd" aria-label="Report head">{n.reportHead.trimEnd()}</pre> : null}
+      {n.denied?.trim() ? <div className="fix"><span>Denied commands</span>{n.denied.trimEnd()}</div> : null}
+      {manual ? <div className="fix"><span>Rebase by hand in</span>{n.worktree}</div> : null}
+      <div className="actions">
+        {conflict ? <button className="btn btn-signal" onClick={() => deck.act((api) => api.findCause(item.card.id, item.job.id))}>Find cause</button> : null}
+        {conflict ? <button className="btn" aria-pressed={manual} onClick={() => setManual((m) => !m)}>Manual</button> : null}
+        <button className={conflict ? 'btn' : 'btn btn-signal'} onClick={() => deck.act((api) => api.approveGate(item.job.id))}>Approve</button>
+        <button className="btn btn-bad" onClick={() => deck.act((api) => api.rejectGate(item.job.id))}>Reject</button>
+        <button className="btn btn-quiet" onClick={open}>Open job</button>
+      </div>
+    </>
+  );
+}
+
+const RUN_ACTION = {
+  resume: { label: 'Resume', call: (api, id) => api.resumeRun(id) },
+  retry: { label: 'Retry', call: (api, id) => api.retry(id) },
+  discard: { label: 'Discard', call: (api, id) => api.discard(id), bad: true },
+};
+
+function RunBody({ item, deck, open }) {
+  const n = item.job.needsYou;
+  const options = (n.options ?? []).filter((o) => RUN_ACTION[o]);
+  const retry = <button className="btn btn-signal" onClick={() => deck.act((api) => (item.kind === 'land' ? api.finishLand(item.job.id) : api.retry(item.job.id)))}>Retry</button>;
+  return (
+    <>
+      {item.kind === 'run-failed' ? <p className="said">The run stopped: <b>{n.reason}</b></p> : null}
+      {item.kind === 'setup' ? <p className="said">The worktree setup step failed, so the run did not start.</p> : null}
+      {item.kind === 'refusal' ? <p className="said">exo refused the run: <b>{n.text}</b></p> : null}
+      {item.kind === 'land' ? <p className="said">The run passed, but landing on <b>{n.base}</b> stopped: {n.text}</p> : null}
+      <dl className="kv">
+        {item.kind === 'run-failed' ? <><dt>Phase</dt><dd>{n.phase ?? '—'}</dd></> : null}
+        {item.kind === 'setup' ? <><dt>Command</dt><dd>{n.command}</dd></> : null}
+        {item.kind === 'land' && n.action ? <><dt>Action</dt><dd>{n.action}</dd></> : null}
+        {item.job.run?.branch ? <><dt>Branch</dt><dd>{item.job.run.branch}</dd></> : null}
+      </dl>
+      {item.kind === 'setup' && n.tail ? <pre className="cmd" aria-label="Setup output">{n.tail.trimEnd()}</pre> : null}
+      {item.kind === 'refusal' && n.status ? <pre className="cmd" aria-label="Main checkout status">{n.status.trimEnd()}</pre> : null}
+      <div className="actions">
+        {item.kind === 'run-failed' ? options.map((o, i) => (
+          <button key={o} className={`btn${RUN_ACTION[o].bad ? ' btn-bad' : i === 0 ? ' btn-signal' : ''}`} onClick={() => deck.act((api) => RUN_ACTION[o].call(api, item.job.id))}>{RUN_ACTION[o].label}</button>
+        )) : retry}
+        <button className="btn btn-quiet" onClick={open}>Open job</button>
+      </div>
+    </>
+  );
+}
+
+function BriefBody({ item, deck, open }) {
+  return (
+    <>
+      <p className="said">A brief is ready. Approve it to start the run, or reject it.</p>
+      <dl className="kv"><dt>Brief</dt><dd title={item.job.brief}>{pathTail(item.job.brief)}</dd></dl>
+      <div className="actions">
+        <button className="btn btn-signal" onClick={() => deck.act((api) => api.approve(item.card.id))}>Approve</button>
+        <button className="btn btn-bad" onClick={() => deck.act((api) => api.reject(item.card.id))}>Reject</button>
+        <button className="btn btn-quiet" onClick={open}>Open job</button>
+      </div>
+    </>
+  );
+}
 
 function Choices({ legend, value, onChange, options }) {
   return (
@@ -84,6 +183,9 @@ function Body({ item, deck, open }) {
   const resume = () => deck.act((api) => api.continueJob(item.job.id));
   const stop = () => deck.act((api) => api.stop(item.job.id));
   if (item.kind === 'question') return <QuestionBody item={item} deck={deck} open={open} />;
+  if (item.kind === 'brief') return <BriefBody item={item} deck={deck} open={open} />;
+  if (item.kind === 'gate' || item.kind === 'conflict') return <GateBody item={item} deck={deck} open={open} />;
+  if (['run-failed', 'setup', 'refusal', 'land'].includes(item.kind)) return <RunBody item={item} deck={deck} open={open} />;
   if (item.kind === 'permission') {
     const { tool_name: tool, input = {} } = item.ask.request;
     return (
@@ -170,7 +272,7 @@ export default function NeedsYou({ items, deck, openJob }) {
           {items.length === 0 ? (
             <div className="calm">
               <p>Nothing is waiting on you.</p>
-              <p className="dim">Questions, permissions, broken invariants and health failures land here first.</p>
+              <p className="dim">Questions, permissions, briefs, run gates and failures land here first.</p>
             </div>
           ) : null}
         </ScrollArea.Viewport>

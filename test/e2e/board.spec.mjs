@@ -1,5 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
-import { boot, stateOf, until, withCards } from './fixture.mjs';
+import { boot, repo, stateOf, until, withCards } from './fixture.mjs';
 
 const LANES = ['Inbox', 'Shaped', 'Approved', 'Queued', 'Running', 'Review', 'Done'];
 let t;
@@ -136,7 +137,8 @@ test.describe('Needs you', () => {
     await card.getByRole('radio', { name: /Casual/ }).click();
     await card.getByRole('button', { name: 'Answer' }).click();
     await expect(lane(page, 'Shaped')).toContainText('Greet');
-    await expect(needs(page)).toContainText('Nothing is waiting on you.');
+    await expect(card).toHaveCount(0);
+    await expect(needs(page).locator('li[data-kind="brief"]')).toContainText('Greet');
   });
 
   test('a lettered text question sends the chosen letters as the reply', async ({ page }) => {
@@ -195,6 +197,49 @@ test.describe('Needs you', () => {
     await expect(card).toContainText('npm install -g @anthropic-ai/claude-code');
     await card.getByRole('button', { name: 'Check again' }).click();
     await expect(card).toBeVisible();
+  });
+});
+
+test.describe('runs', () => {
+  const needs = (page) => page.getByRole('region', { name: 'Needs you' });
+
+  test('a brief whose branch already exists cannot be approved and its card says why', async ({ page }) => {
+    t = await boot({ steps: ['brief'] });
+    const { project, cards } = await withCards(t, ['Greet']);
+    execFileSync('git', ['-C', project.path, 'branch', 'greet']);
+    await page.goto(t.deckUrl);
+    await page.getByRole('button', { name: 'Shape', exact: true }).click();
+    const brief = needs(page).locator('li[data-kind="brief"]');
+    await brief.getByRole('button', { name: 'Approve' }).click();
+    const card = page.locator(`[data-card="${cards[0].id}"]`);
+    await expect(card.getByRole('note')).toHaveText('Cannot approve: branch greet already exists as a local branch');
+    const s = await stateOf(t);
+    expect(s.jobs.filter((j) => j.stage === 'run')).toHaveLength(0);
+    await expect(brief).toBeVisible();
+  });
+
+  test('Find cause on an Inbox card with a worktree starts a find-cause job there', async ({ page }) => {
+    const worktree = repo('deck-wt-');
+    const seed = {
+      projects: [{ key: 'local/p', path: repo(), origin: null }],
+      cards: [{ id: 'c1', projectKey: 'local/p', title: 'Crashed card', lane: 'Inbox' }],
+      jobs: [{ id: 'spec1', cardId: 'c1', stage: 'spec', status: 'crashed', worktree }],
+    };
+    t = await boot({ steps: ['say:Looking at the crash'], seed });
+    await page.goto(t.deckUrl);
+    await page.getByRole('button', { name: 'Actions for Crashed card' }).click();
+    await page.getByRole('menuitem', { name: 'Find cause' }).click();
+    const job = await until(async () => (await stateOf(t)).jobs.find((j) => j.stage === 'find-cause'));
+    expect(job.worktree).toBe(worktree);
+    expect(job.cardId).toBe('c1');
+  });
+
+  test('Find cause is disabled on an Inbox card without a worktree', async ({ page }) => {
+    t = await boot();
+    await withCards(t, ['Fresh card']);
+    await page.goto(t.deckUrl);
+    await page.getByRole('button', { name: 'Actions for Fresh card' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Find cause' })).toHaveAttribute('data-disabled', '');
   });
 });
 

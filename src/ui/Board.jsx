@@ -16,7 +16,7 @@ const HINT = {
   Done: 'Finished and merged.',
 };
 
-function CardMenu({ card, job, onShape, onOpen, canShape }) {
+function CardMenu({ card, job, onShape, onOpen, canShape, inbox, canFind, onFind }) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger className="icon-btn" aria-label={`Actions for ${card.title}`}>
@@ -25,6 +25,7 @@ function CardMenu({ card, job, onShape, onOpen, canShape }) {
       <DropdownMenu.Portal>
         <DropdownMenu.Content className="menu" align="end" sideOffset={4}>
           <DropdownMenu.Item className="menu-item" disabled={!canShape} onSelect={onShape}>Shape this card</DropdownMenu.Item>
+          {inbox ? <DropdownMenu.Item className="menu-item" disabled={!canFind} onSelect={onFind}>Find cause</DropdownMenu.Item> : null}
           <DropdownMenu.Item className="menu-item" disabled={!job} onSelect={onOpen}>Open job</DropdownMenu.Item>
           <DropdownMenu.Item className="menu-item" onSelect={() => navigator.clipboard?.writeText(card.id)}>Copy card id</DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -33,11 +34,14 @@ function CardMenu({ card, job, onShape, onOpen, canShape }) {
   );
 }
 
-function Card({ card, state, shape, openJob, setFocusCard }) {
+function Card({ card, state, shape, findCause, openJob, setFocusCard }) {
   const { ref, isDragging } = useDraggable({ id: card.id });
   const job = latestJob(state, card.id);
   const live = liveJob(state, card.id);
-  const canShape = card.lane === 'Inbox' && !live;
+  const inbox = card.lane === 'Inbox';
+  const canShape = inbox && !live;
+  // why: Decision 15; find-cause inspects the card's latest worktree, so it needs one still on disk and no other live session.
+  const canFind = inbox && !(live && live.stage !== 'run') && state.jobs.some((j) => j.cardId === card.id && j.worktree && !j.worktreeRemoved);
   return (
     <div ref={ref} className="card-slot" data-dragging={isDragging} data-card={card.id} onPointerEnter={() => setFocusCard?.(card.id)} onPointerLeave={() => setFocusCard?.(null)} onFocus={() => setFocusCard?.(card.id)} onBlur={() => setFocusCard?.(null)}>
       <motion.article layout="position" className="card" transition={spring}
@@ -45,9 +49,11 @@ function Card({ card, state, shape, openJob, setFocusCard }) {
         <span className="plate-id num">{shortId(card.id)}</span>
         <div className="card-top">
           <h3>{card.title}</h3>
-          <CardMenu card={card} job={job} canShape={canShape} onShape={() => shape(card)} onOpen={() => openJob(job.id)} />
+          <CardMenu card={card} job={job} canShape={canShape} onShape={() => shape(card)} onOpen={() => openJob(job.id)}
+            inbox={inbox} canFind={canFind} onFind={() => findCause(card)} />
         </div>
         {card.body ? <p className="card-body">{card.body}</p> : null}
+        {card.collision?.text ? <p className="card-note" role="note">Cannot approve: {card.collision.text}</p> : null}
         <div className="card-meta">
           {job ? <button className="link" onClick={() => openJob(job.id)}><Status job={job} scope="card" /></button> : <span className="dim">No job yet</span>}
         </div>
@@ -57,14 +63,14 @@ function Card({ card, state, shape, openJob, setFocusCard }) {
   );
 }
 
-function Lane({ name, cards, bridge, dragging, state, shape, openJob, addCard, setFocusCard }) {
+function Lane({ name, cards, bridge, dragging, state, shape, findCause, openJob, addCard, setFocusCard }) {
   const { ref, isDropTarget } = useDroppable({ id: name });
   const view = useRef(null);
   const below = useBelow(view, '.card-slot', cards.length);
   const collapsed = cards.length === 0 && name !== 'Inbox' && !dragging;
   const waiting = name === 'Running' ? cards.filter((c) => liveJob(state, c.id)?.status === 'waiting') : [];
   const working = name === 'Running' ? cards.filter((c) => !waiting.includes(c)) : cards;
-  const card = (c) => <Card key={c.id} card={c} state={state} shape={shape} openJob={openJob} setFocusCard={setFocusCard} />;
+  const card = (c) => <Card key={c.id} card={c} state={state} shape={shape} findCause={findCause} openJob={openJob} setFocusCard={setFocusCard} />;
   return (
     <motion.section ref={ref} layout className={`lane${collapsed ? ' lane-collapsed' : ''}`} data-lane={name} data-over={isDropTarget} data-active={name === 'Running' && working.length > 0} data-load={cards.length > 0} data-bridge={bridge}
       aria-label={`${name}, ${cards.length} card${cards.length === 1 ? '' : 's'}`} transition={spring}>
@@ -110,6 +116,7 @@ export default function Board({ state, project, deck, openJob, addCard, setFocus
   const [refusal, setRefusal] = useState(null);
   const groups = groupCards(state, project.key);
   const shape = (card) => deck.act((api) => api.shape(card.id));
+  const findCause = (card) => deck.act((api) => api.findCause(card.id));
 
   const onDragEnd = ({ operation, canceled }) => {
     setDragging(false);
@@ -127,7 +134,7 @@ export default function Board({ state, project, deck, openJob, addCard, setFocus
       <div className="board-col" data-empty={LANES.every((l) => groups[l].length === 0)}>
       <div className="board" role="group" aria-label={`Board for ${project.key}`}>
         {LANES.map((name, i) => (
-          <Lane key={name} name={name} cards={groups[name]} bridge={groups[name].length > 0 && groups[LANES[i + 1]]?.length > 0} dragging={dragging} state={state} shape={shape} openJob={openJob} addCard={addCard} setFocusCard={setFocusCard} />
+          <Lane key={name} name={name} cards={groups[name]} bridge={groups[name].length > 0 && groups[LANES[i + 1]]?.length > 0} dragging={dragging} state={state} shape={shape} findCause={findCause} openJob={openJob} addCard={addCard} setFocusCard={setFocusCard} />
         ))}
       </div>
       {refusal ? <p className="refusal" role="status">{refusal}<button className="link" onClick={() => setRefusal(null)}>Dismiss</button></p> : null}

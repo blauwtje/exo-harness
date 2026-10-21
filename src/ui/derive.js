@@ -19,7 +19,12 @@ export function groupCards(state, projectKey) {
   return lanes;
 }
 
-const RANK = { invariant: 0, health: 1, failure: 2, permission: 3, question: 4, 'turn-cap': 5 };
+const RANK = {
+  invariant: 0, health: 1, failure: 2, 'run-failed': 3, refusal: 4, setup: 5, land: 6, conflict: 7, gate: 8,
+  permission: 9, question: 10, brief: 11, 'turn-cap': 12,
+};
+// why: Decision 18; the daemon deletes needsYou once a run kind is answered, so a job carrying one still waits, latest or not.
+export const RUN_KINDS = new Set(['brief', 'gate', 'conflict', 'run-failed', 'setup', 'refusal', 'land']);
 
 export function needsYou(state, health) {
   const items = [];
@@ -32,6 +37,8 @@ export function needsYou(state, health) {
     items.push({ kind: ask.card === 'question' ? 'question' : 'permission', key: `ask:${ask.requestId}`, job, card: cardOf(job.cardId), ask });
   }
   for (const job of state.jobs) {
+    const kind = job.needsYou?.kind;
+    if (RUN_KINDS.has(kind)) { items.push({ kind, key: `${kind}:${job.id}`, job, card: cardOf(job.cardId) }); continue; }
     if (latestJob(state, job.cardId)?.id !== job.id) continue;
     const card = cardOf(job.cardId);
     if (job.needsYou?.reason === 'turn-cap') items.push({ kind: 'turn-cap', key: `cap:${job.id}`, job, card });

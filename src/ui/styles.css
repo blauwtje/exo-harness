@@ -136,6 +136,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--raised); pad
 .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: -4px -8px 0 0; }
 .card h3 { font-size: 16px; font-weight: 600; line-height: 22px; overflow-wrap: anywhere; padding-top: 4px; }
 .card-body { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card-note { margin: 0; color: var(--warn); font-size: 13px; overflow-wrap: anywhere; }
 .card-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; min-height: 20px; }
 .card .btn { align-self: flex-start; }
 @media (hover: hover) and (pointer: fine) { .card:hover { border-color: var(--titanium); } }
@@ -159,6 +160,13 @@ code { font-family: var(--mono); font-size: 12px; background: var(--raised); pad
 .need-kind { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 4px; background: rgba(255, 107, 44, 0.14); color: var(--text); font-weight: 500; }
 .need-health .need-kind, .need-failure .need-kind { background: rgba(232, 116, 154, 0.16); }
 .need-invariant .need-kind { background: rgba(226, 178, 60, 0.16); }
+.need-run-failed .need-kind, .need-refusal .need-kind, .need-setup .need-kind { background: rgba(232, 116, 154, 0.16); }
+.need-land .need-kind, .need-conflict .need-kind { background: rgba(226, 178, 60, 0.16); }
+.gates { display: grid; gap: 2px; padding-left: 16px; font-size: 13px; }
+.files { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 12px/1.5 var(--mono); list-style: none; padding: 0; }
+.files .link[aria-pressed='true'] { color: var(--signal); text-decoration-color: var(--signal); }
+.cmd-diff { max-height: 240px; }
+.fix .fix-file { font-family: var(--mono); color: var(--text); }
 .said { color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
 .cmd { margin: 0; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }

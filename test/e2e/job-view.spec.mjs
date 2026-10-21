@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { boot, stateOf, until, USAGE, withCards } from './fixture.mjs';
+import { boot, repo, stateOf, until, USAGE, withCards } from './fixture.mjs';
 
 let t;
 test.afterEach(async () => { await t?.close(); t = null; });
@@ -93,4 +93,23 @@ test('Stop all asks first, then stops every live job', async ({ page }) => {
   await page.getByRole('dialog', { name: 'Stop all jobs' }).getByRole('button', { name: /^Stop \d+ jobs?$/ }).click();
   await until(async () => (await stateOf(t)).jobs.every((j) => j.status === 'stopped'));
   await expect(all).toBeDisabled();
+});
+
+test('a run job shows its exo run fields', async ({ page }) => {
+  const run = { id: 'run-7', phase: 'parked', stage: 'build', branch: 'feat-greet', task: 3, landed: 2, total: 5, reason: 'gate: review the diff', runRoot: '/tmp/deck-run-root' };
+  t = await boot({
+    seed: {
+      projects: [{ key: 'local/p', path: repo(), origin: null }],
+      cards: [{ id: 'c1', projectKey: 'local/p', title: 'Run card', lane: 'Review' }],
+      jobs: [{ id: 'run1', cardId: 'c1', stage: 'run', status: 'stopped', run }],
+    },
+  });
+  await page.goto(`${t.deckUrl}`);
+  await expect(page.getByRole('group', { name: /^Board for / })).toBeVisible();
+  await page.evaluate(() => { location.hash = '#/jobs/run1'; });
+  await expect(page.getByRole('heading', { level: 1, name: 'Run card' })).toBeVisible();
+  const runRow = (label) => page.getByRole('region', { name: 'Run' }).locator('.ledger-row').filter({ has: page.getByText(label, { exact: true }) });
+  const want = { 'Run id': run.id, Phase: run.phase, Stage: run.stage, Branch: run.branch, Task: '3', Landed: '2', 'Total tasks': '5', Reason: run.reason, 'Run root': run.runRoot };
+  for (const [label, value] of Object.entries(want)) await expect(runRow(label)).toContainText(value);
+  await expect(page.getByRole('button', { name: 'Send reply' })).toHaveCount(0);
 });
