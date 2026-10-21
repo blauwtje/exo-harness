@@ -62,14 +62,14 @@ async function setupArgv(project, worktree) {
 
 const redact = (text, secrets) => secrets.reduce((t, s) => t.split(s).join('[redacted]'), text);
 
-export async function runSetup(project, worktree, mainCheckout) {
+export async function runSetup(project, worktree, mainCheckout, parentEnv = process.env) {
   const secrets = (await envSetting(mainCheckout)) === 'copy' ? await copyEnvFiles(worktree, mainCheckout) : [];
   const argv = await setupArgv(project, worktree);
   if (!argv) return { ok: true, command: null, tail: '' };
   const command = argv.join(' ');
   const output = (r) => redact(`${r.stdout ?? ''}${r.stderr ?? ''}`, secrets).slice(-TAIL_CHARS);
   try {
-    const r = await exec(argv[0], argv.slice(1), { cwd: worktree, env: childEnv('exo-run'), timeout: 600000, maxBuffer: 10 * 1024 * 1024 });
+    const r = await exec(argv[0], argv.slice(1), { cwd: worktree, env: childEnv('exo-run', parentEnv), timeout: 600000, maxBuffer: 10 * 1024 * 1024 });
     return { ok: true, command, tail: output(r) };
   } catch (err) {
     const tail = err.stdout === undefined ? redact(String(err.message), secrets) : output(err);

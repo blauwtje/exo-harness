@@ -26,16 +26,16 @@ test('F-3-07 gateDetails reads gates, stat, files, report head and denied; fileD
   writeFileSync(join(runDir, 'gates.md'), 'gate one\ngate two\n');
   writeFileSync(join(runDir, 'report.md'), Array.from({ length: 20 }, (_, i) => `r${i}`).join('\n'));
   writeFileSync(join(runDir, 'denied.txt'), 'rm -rf\n');
-  const d = await gateDetails(runDir, dir, 'main', 'feat');
+  const d = await gateDetails({ runDir, runRoot: dir, base: 'main', branch: 'feat' });
   assert.deepEqual(d.gates, ['gate one', 'gate two']);
   assert.match(d.diffStat, /a\.txt/);
   assert.deepEqual(d.files, ['a.txt']);
   assert.equal(d.reportHead.split('\n').length, 15);
   assert.equal(d.denied, 'rm -rf\n');
   assert.deepEqual(d.conflicts, []);
-  assert.match(await fileDiff(dir, 'main', 'feat', 'a.txt'), /\+two/);
+  assert.match(await fileDiff({ runRoot: dir, base: 'main', branch: 'feat', file: 'a.txt' }), /\+two/);
   for (const bad of ['../a.txt', '/etc/passwd', 'b.txt', '', '-p']) {
-    await assert.rejects(fileDiff(dir, 'main', 'feat', bad), /not in the branch diff/);
+    await assert.rejects(fileDiff({ runRoot: dir, base: 'main', branch: 'feat', file: bad }), /not in the branch diff/);
   }
 });
 
@@ -43,7 +43,7 @@ test('F-3-11 S-06 gateDetails lists conflicting files and touches no worktree', 
   const dir = repo();
   commit(dir, 'a.txt', 'three\n', 'main change');
   const before = git(dir, 'status', '--porcelain');
-  const d = await gateDetails(tmp(), dir, 'main', 'feat');
+  const d = await gateDetails({ runDir: tmp(), runRoot: dir, base: 'main', branch: 'feat' });
   assert.deepEqual(d.conflicts, ['a.txt']);
   assert.equal(git(dir, 'status', '--porcelain'), before);
   assert.equal(git(dir, 'symbolic-ref', '--short', 'HEAD').trim(), 'main');

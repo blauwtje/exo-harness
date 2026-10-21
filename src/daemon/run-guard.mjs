@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
 import { readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
+import { childEnv } from './child-env.mjs';
+import { cliOf } from './stages.mjs';
 
-const run = (cmd, args, cwd) =>
+const run = (cmd, args, cwd, env) =>
   new Promise((resolve) => {
-    execFile(cmd, args, { cwd, timeout: 60000 }, (err, stdout) => resolve({ err, stdout: String(stdout ?? '') }));
+    execFile(cmd, args, { cwd, env, timeout: 60000 }, (err, stdout) => resolve({ err, stdout: String(stdout ?? '') }));
   });
 
 const field = (text, name) =>
@@ -28,9 +30,9 @@ export async function checkCollision(repo, branch) {
   return null;
 }
 
-export async function checkProvider(pluginRoot, cwd) {
-  const cli = join(pluginRoot, 'skills', 'build', 'scripts', 'exo-cli.mjs');
-  const { err, stdout } = await run(process.execPath, [cli, 'run', 'config'], cwd);
+// why: exo gets the same scrubbed env as the run it checks for (parentEnv, not the raw process.env).
+export async function checkProvider(pluginRoot, cwd, parentEnv = process.env) {
+  const { err, stdout } = await run(process.execPath, [cliOf(pluginRoot), 'run', 'config'], cwd, childEnv('exo-run', parentEnv));
   const provider = stdout.match(/^defaults\.provider\s*=\s*"?([\w.-]+)"?/m)?.[1] ?? null;
   if (!err && provider === 'claude') return { ok: true, provider };
   return { ok: false, provider, text: `exo run config must print defaults.provider = "claude"; got ${provider ?? 'nothing'}` };

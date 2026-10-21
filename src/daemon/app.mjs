@@ -8,7 +8,7 @@ import { checkHealth } from './health.mjs';
 import { addCard, addJob, addProject } from './model.mjs';
 import { reconcile } from './reconcile.mjs';
 import { archiveRun, removeWorktree } from './archive.mjs';
-import { approveRun, holderDone, resumeRun, startRun } from './exo-run.mjs';
+import { FINAL_PHASES, approveRun, holderDone, resumeRun, startRun } from './exo-run.mjs';
 import { fileDiff, finishLand, gateDetails } from './run-gate.mjs';
 import { checkCollision, checkProvider, readPlan, runCwd } from './run-guard.mjs';
 import { watchRun } from './run-watch.mjs';
@@ -176,6 +176,8 @@ export function createApp({
     return states.find((s) => !holderDone(s)) ?? null;
   }
 
+  const restart = (j, card) => startFor(j, card).catch((e) => { j.status = 'crashed'; j.crashReason = e.message; store.save(state); });
+
   function queue({ j, card, cwd, text }) {
     const holder = holderOf(cwd);
     Object.assign(j, { status: 'queued', queued: { text, holder: holder && { id: holder.id, phase: holder.phase, pid: holder.pid } } });
@@ -184,7 +186,7 @@ export function createApp({
       if (holderOf(cwd)) return;
       clearInterval(timer);
       timers.delete(j.id);
-      startFor(j, card).catch((e) => { j.status = 'crashed'; j.crashReason = e.message; store.save(state); });
+      restart(j, card);
     }, loadStages().stages.run.pollMs);
     timer.unref();
     timers.set(j.id, timer);
@@ -192,7 +194,7 @@ export function createApp({
   }
 
   // why: Decisions 10-13 and 17 and 22; every run phase becomes a card, an archive or a lane move.
-  const FINAL_RUN = new Set(['landed', 'passed', 'stopped', 'crashed', 'refused']);
+  const FINAL_RUN = new Set(FINAL_PHASES.filter((p) => p !== 'parked'));
   const RUN_ID = /^[A-Za-z0-9][\w.-]*$/;
   const SAFE_REF = /^[A-Za-z0-9][\w./-]*$/;
   const rerun = new Set();
@@ -237,13 +239,14 @@ export function createApp({
     store.save(state);
   }
 
-  async function landOrCard(j, card, ...[project, base]) {
+  async function landOrCard({ j, card, project, base }) {
     const r = await finishLand(project.path, base, j.run.branch);
     if (r.ok) {
       Object.assign(j.run, { phase: 'landed', landed: r.range });
       return finishLanded(j, card, project);
     }
     Object.assign(j, { status: 'waiting', needsYou: { kind: 'land', text: r.text, action: r.action, base, options: ['retry'] } });
+    card.lane = 'Review';
     store.save(state);
   }
 
@@ -255,12 +258,12 @@ export function createApp({
   async function parked(j, card, project) {
     const { run } = j;
     if (!SAFE_REF.test(run.branch ?? '')) throw new Error(`unsafe branch name: ${run.branch}`);
-    const d = await gateDetails(runDirOf(j), j.runRoot, await baseOf(project), run.branch);
+    const d = await gateDetails({ runDir: runDirOf(j), runRoot: j.runRoot, base: await baseOf(project), branch: run.branch });
     const reasons = [run.reason ?? '', ...d.gates];
     const landBase = reasons.map((x) => /cannot switch to ([^\s()]+)/.exec(x)?.[1]).find(Boolean);
     if (landBase) {
       if (!SAFE_REF.test(landBase)) throw new Error(`unsafe base name: ${landBase}`);
-      return landOrCard(j, card, project, landBase);
+      return landOrCard({ j, card, project, base: landBase });
     }
     const conflict = reasons.some((x) => x.includes('rebase conflict'));
     Object.assign(j, {
@@ -288,9 +291,20 @@ export function createApp({
     runFailed(j, reason);
   }
 
+  // why: the watch SIGTERMed this run for an apiKeySource or cwd breach; it is archived and stopped, never resumed (Decisions 12, 13).
+  async function invariantStop(j) {
+    if (j.status === 'stopped') return;
+    watchers.get(j.id)?.stop();
+    await archive(j);
+    const reason = `init check failed: ${j.initMismatches.join(', ')}`;
+    Object.assign(j, { status: 'stopped', needsYou: { kind: 'run-failed', reason, phase: j.run.phase, options: ['retry', 'discard'] } });
+    store.save(state);
+  }
+
   async function step(j) {
     const { run } = j;
     if (!run?.phase || closed) return;
+    if (j.initMismatches?.length) return invariantStop(j);
     const card = cardOf(j.cardId);
     const project = projectOf(card);
     if (run.phase !== 'parked' && !FINAL_RUN.has(run.phase)) return gone(j);
@@ -336,7 +350,7 @@ export function createApp({
   };
   const resumed = (j, card) => {
     for (const k of ['needsYou', 'outcome']) delete j[k];
-    delete j.handled;
+    for (const k of ['handled', 'archived']) delete j[k];
     Object.assign(j, { status: 'running' });
     card.lane = 'Approved';
     store.save(state);
@@ -369,15 +383,16 @@ export function createApp({
     const refuse = (text) => stopWith(j, 'refused', { kind: 'refusal', text, options: ['retry'] });
     if (guard.refusal) return refuse(guard.text);
     const { cwd } = guard;
-    const provider = await checkProvider(pluginRoot, cwd);
+    const provider = await checkProvider(pluginRoot, cwd, parentEnv);
     if (!provider.ok) return refuse(provider.text);
-    const setup = cwd === j.worktree ? await runSetup(project, j.worktree, project.path) : { ok: true };
+    const setup = cwd === j.worktree ? await runSetup(project, j.worktree, project.path, parentEnv) : { ok: true };
     if (!setup.ok) return stopWith(j, 'setup', { kind: 'setup', command: setup.command, tail: setup.tail, options: ['retry'] });
     const res = await startRun({ pluginRoot, cwd, brief: j.brief, parentEnv });
     if (res.refusal === 'lock') return queue({ j, card, cwd, text: res.text });
     if (res.refusal) return refuse(res.text);
-    Object.assign(j, { status: 'running', run: { id: res.runId }, runRoot: cwd });
-    for (const k of ['needsYou', 'outcome', 'queued']) delete j[k];
+    // why: Decision 12 allows one automatic resume per job, so a retried run keeps the spent one.
+    Object.assign(j, { status: 'running', run: { id: res.runId, ...(j.run?.resumed && { resumed: true }) }, runRoot: cwd });
+    for (const k of ['needsYou', 'outcome', 'queued', 'archived', 'initMismatches']) delete j[k];
     card.lane = 'Approved';
     store.save(state);
     attach(j);
@@ -468,7 +483,10 @@ export function createApp({
       try { return await startFor(Object.assign(j, { status: 'running' }), cardOf(j.cardId)); } finally { approving.delete(id); }
     },
     approveGate: ({ id }) => again(id, ['gate', 'conflict'], (j) => approveRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
-    resumeRunRoute: ({ id }) => again(id, ['run-failed'], (j) => resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
+    resumeRunRoute({ id }) {
+      if (job(id).initMismatches?.length) throw fail(409, 'a run stopped by the init check is never resumed');
+      return again(id, ['run-failed'], (j) => resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv }));
+    },
     rejectGate({ id }) {
       const j = job(id);
       needs(j, 'gate', 'conflict');
@@ -483,7 +501,7 @@ export function createApp({
       const { base } = needs(j, 'land');
       const card = cardOf(j.cardId);
       approving.add(id);
-      try { await landOrCard(j, card, projectOf(card), base); return j; } finally { approving.delete(id); }
+      try { await landOrCard({ j, card, project: projectOf(card), base }); return j; } finally { approving.delete(id); }
     },
     async discard({ id }) {
       const j = job(id);
@@ -503,7 +521,7 @@ export function createApp({
     async diff({ id, url }) {
       const j = job(id);
       const { base } = needs(j, 'gate', 'conflict');
-      try { return { diff: await fileDiff(j.runRoot, base, j.run.branch, url.searchParams.get('file')) }; } catch (e) { throw fail(400, e.message); }
+      try { return { diff: await fileDiff({ runRoot: j.runRoot, base, branch: j.run.branch, file: url.searchParams.get('file') }) }; } catch (e) { throw fail(400, e.message); }
     },
     async reply({ id, body }) {
       const j = job(id);
@@ -561,6 +579,7 @@ export function createApp({
       }
       for (const j of state.jobs) {
         if (j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot) { attach(j); onRun(j); }
+        if (j.stage === 'run' && j.status === 'queued') restart(j, cardOf(j.cardId));
       }
       return { port: actual, url, reconciled: auth.ok };
     },

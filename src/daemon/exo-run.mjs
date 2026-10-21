@@ -1,9 +1,8 @@
 import { execFile } from 'node:child_process';
 import { childEnv } from './child-env.mjs';
-import { loadStages, runArgs } from './stages.mjs';
+import { cliOf, loadStages, runArgs } from './stages.mjs';
 
-const FINAL = ['passed', 'landed', 'parked', 'stopped', 'refused', 'crashed'];
-const cliOf = (pluginRoot) => `${pluginRoot}/skills/build/scripts/exo-cli.mjs`;
+export const FINAL_PHASES = ['passed', 'landed', 'parked', 'stopped', 'refused', 'crashed'];
 
 // why: argv array and the exo-run env scrub, so the user's CLAUDECODE never reaches exo.
 const exo = (args, cwd, parentEnv) =>
@@ -38,9 +37,9 @@ export const approveRun = ({ pluginRoot, cwd, runId, parentEnv = process.env }) 
 export const resumeRun = ({ pluginRoot, cwd, runId, parentEnv = process.env }) =>
   again([cliOf(pluginRoot), 'run', '--resume', runId], cwd, parentEnv);
 
-function alive(pid) {
+export function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
 
 // why: a queued job retries once its holder is final or its process is gone (S-07).
-export const holderDone = (holder) => FINAL.includes(holder?.phase) || !(holder?.pid && alive(holder.pid));
+export const holderDone = (holder) => FINAL_PHASES.includes(holder?.phase) || !(holder?.pid && alive(holder.pid));

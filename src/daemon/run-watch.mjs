@@ -1,15 +1,11 @@
 import { closeSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { checkInit } from './invariants.mjs';
+import { alive, FINAL_PHASES } from './exo-run.mjs';
 import { killGroup } from './session.mjs';
 import { parseLine } from './stream.mjs';
 
 const KEYS = ['phase', 'stage', 'runRoot', 'branch', 'task', 'landed', 'total', 'reason'];
-const FINAL = ['passed', 'landed', 'parked', 'stopped', 'refused', 'crashed'];
-
-const alive = (pid) => {
-  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
-};
 const readState = (runRoot, id) => {
   for (const d of ['run', 'kept']) {
     try { return JSON.parse(readFileSync(join(runRoot, '.exo', d, id, 'state.json'), 'utf8')); } catch { continue; }
@@ -32,6 +28,7 @@ export function watchRun({ job, runRoot, store, state, onChange = () => {}, inte
   const checked = new Set();
   let dir = null;
   let stopped = false;
+  let lastError = null;
 
   const initCheck = (name, event, st) => {
     if (checked.has(name) || event?.type !== 'system' || event.subtype !== 'init') return;
@@ -78,13 +75,16 @@ export function watchRun({ job, runRoot, store, state, onChange = () => {}, inte
     if (!st) return;
     const run = { ...job.run };
     for (const k of KEYS) run[k] = st[k] ?? null;
-    run.alive = !FINAL.includes(st.phase) && st.pid ? alive(st.pid) : false;
+    run.alive = !FINAL_PHASES.includes(st.phase) && st.pid ? alive(st.pid) : false;
     const moved = JSON.stringify(run) !== JSON.stringify(job.run);
     job.run = run;
     let logged = false;
-    try { logged = tail(st); } catch { logged = false; }
+    try { logged = tail(st); } catch (e) {
+      // why: an unreadable log skips its events and the init check, so it must leave a record (once per message).
+      if (e.message !== lastError) { lastError = e.message; store.appendEvent(job.id, { kind: 'watch-error', message: e.message }); logged = true; }
+    }
     if (moved || logged || job.initMismatches) { store.save(state); onChange(job); }
-    if (stopped || (FINAL.includes(st.phase) && !logged)) clearInterval(timer);
+    if (stopped || (FINAL_PHASES.includes(st.phase) && !logged)) clearInterval(timer);
   };
 
   const timer = setInterval(poll, intervalMs);

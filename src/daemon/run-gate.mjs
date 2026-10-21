@@ -18,7 +18,7 @@ async function conflictFiles(runRoot, base, branch) {
   return lines(r.stdout).slice(1);
 }
 
-export async function gateDetails(runDir, runRoot, ...[base, branch]) {
+export async function gateDetails({ runDir, runRoot, base, branch }) {
   const [gates, report, denied, stat, names] = await Promise.all([
     text(join(runDir, 'gates.md')),
     text(join(runDir, 'report.md')),
@@ -36,7 +36,7 @@ export async function gateDetails(runDir, runRoot, ...[base, branch]) {
   };
 }
 
-export async function fileDiff(runRoot, ...[base, branch, file]) {
+export async function fileDiff({ runRoot, base, branch, file }) {
   const names = await git(runRoot, ['diff', '--name-only', `${base}...${branch}`]);
   if (typeof file !== 'string' || !lines(names.stdout).includes(file)) throw new Error('file is not in the branch diff');
   return (await git(runRoot, ['diff', `${base}...${branch}`, '--', file])).stdout;

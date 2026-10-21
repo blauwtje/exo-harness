@@ -4,9 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { FINAL_PHASES } from '../src/daemon/exo-run.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const FINAL = ['passed', 'landed', 'parked', 'stopped', 'refused', 'crashed'];
 const HEADING = '## Probe P3';
 
 const flag = (name) => {
@@ -61,7 +61,7 @@ function readFinal(wt, id) {
   for (const dir of ['run', 'kept']) {
     const file = join(wt, '.exo', dir, id, 'state.json');
     const state = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
-    if (state && FINAL.includes(state.phase)) return { state, dir: join(wt, '.exo', dir, id) };
+    if (state && FINAL_PHASES.includes(state.phase)) return { state, dir: join(wt, '.exo', dir, id) };
   }
   return null;
 }

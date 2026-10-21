@@ -9,7 +9,8 @@ export const liveJob = (state, cardId) => state.jobs.findLast((j) => j.cardId ==
 
 export function laneOf(state, card) {
   const j = liveJob(state, card.id);
-  if (j) return j.status === 'queued' ? 'Queued' : 'Running';
+  // why: Decision 17; a parked run waits on you in Review, though its job is still live.
+  if (j) return j.status === 'queued' ? 'Queued' : j.stage === 'run' && j.status === 'waiting' && card.lane === 'Review' ? 'Review' : 'Running';
   return LANES.includes(card.lane) ? card.lane : 'Inbox';
 }
 

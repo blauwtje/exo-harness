@@ -30,8 +30,10 @@ export function buildArgs(stage, job, mode) {
 export const userMessage = (stage, card) =>
   loadStages().stages[stage].userMessage.replace('{card}', () => `${card.title}\n\n${card.body}`);
 
+export const cliOf = (pluginRoot) => `${pluginRoot}/skills/build/scripts/exo-cli.mjs`;
+
 export const runArgs = (job, stage) => [
-  `${job.pluginRoot}/skills/build/scripts/exo-cli.mjs`, 'run', job.brief, '--detach',
+  cliOf(job.pluginRoot), 'run', job.brief, '--detach',
   '--max-run-usd', String(stage.maxRunUsd),
   '--max-budget-usd', String(stage.maxBudgetUsd),
 ];
