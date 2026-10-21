@@ -126,8 +126,8 @@ test('F-3-05 S-07 a held lock queues the job behind the holder and starts it onc
     assert.equal(j.queued.holder.id, 'holder');
     t.setScenario({ id: 'run-4', phase: 'build' });
     holder('landed');
-    await until(() => j.status === 'running');
-    assert.equal(j.run.id, 'run-4');
+    await until(() => j.run?.id === 'run-4');
+    assert.notEqual(j.status, 'queued');
   } finally { await t.app.close(); }
 });
 

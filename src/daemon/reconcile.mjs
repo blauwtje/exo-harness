@@ -52,7 +52,7 @@ export async function reconcile({
 }) {
   const results = [];
   for (const job of state.jobs) {
-    if (FINAL.has(job.status) || IDLE.has(job.status) || skip(job)) continue;
+    if (FINAL.has(job.status) || IDLE.has(job.status) || job.stage === 'run' || skip(job)) continue;
     const crash = (why) => {
       Object.assign(job, { status: 'crashed', crashReason: why });
       delete job.pid;

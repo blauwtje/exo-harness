@@ -108,3 +108,15 @@ test('a SIGTERM-ignoring group is SIGKILLed after the grace period', async () =>
     try { process.kill(-g.pid, 'SIGKILL'); } catch {}
   }
 });
+
+test('F-3-06 reconcile skips run jobs: no group kill, no claude resume, no crash', async () => {
+  const g = await oldGroup();
+  const s = setup({ stage: 'run', pid: g.pid, pgid: g.pid, startedAtLstart: g.lstart, run: { id: 'r1' } });
+  try {
+    const res = await reconcile({ ...s, sessionExists: () => false, graceMs: 200 });
+    assert.deepEqual(res, []);
+    assert.equal(s.starts.length, 0);
+    assert.equal(s.job.status, 'running');
+    assert.equal(alive(g.pid), true);
+  } finally { process.kill(-g.pid, 'SIGKILL'); }
+});

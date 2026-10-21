@@ -1,13 +1,15 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import { checkAuth } from './auth.mjs';
 import { checkHealth } from './health.mjs';
 import { addCard, addJob, addProject } from './model.mjs';
 import { reconcile } from './reconcile.mjs';
-import { holderDone, startRun } from './exo-run.mjs';
+import { archiveRun, removeWorktree } from './archive.mjs';
+import { approveRun, holderDone, resumeRun, startRun } from './exo-run.mjs';
+import { fileDiff, finishLand, gateDetails } from './run-gate.mjs';
 import { checkCollision, checkProvider, readPlan, runCwd } from './run-guard.mjs';
 import { watchRun } from './run-watch.mjs';
 import { runSetup } from './setup.mjs';
@@ -35,6 +37,12 @@ const ROUTES = [
   ['POST', '/api/cards/:id/approve', 'approve'],
   ['POST', '/api/cards/:id/reject', 'reject'],
   ['POST', '/api/jobs/:id/retry', 'retry'],
+  ['POST', '/api/jobs/:id/finish-land', 'finishLandRoute'],
+  ['POST', '/api/jobs/:id/approve-gate', 'approveGate'],
+  ['POST', '/api/jobs/:id/reject-gate', 'rejectGate'],
+  ['POST', '/api/jobs/:id/resume-run', 'resumeRunRoute'],
+  ['POST', '/api/jobs/:id/discard', 'discard'],
+  ['GET', '/api/jobs/:id/diff', 'diff'],
   ['POST', '/api/jobs/:id/reply', 'reply'],
   ['POST', '/api/jobs/:id/permission', 'permission'],
   ['POST', '/api/jobs/:id/continue', 'continue'],
@@ -170,6 +178,169 @@ export function createApp({
     return j;
   }
 
+  // why: Decisions 10-13 and 17 and 22; every run phase becomes a card, an archive or a lane move.
+  const FINAL_RUN = new Set(['landed', 'passed', 'stopped', 'crashed', 'refused']);
+  const RUN_ID = /^[A-Za-z0-9][\w.-]*$/;
+  const SAFE_REF = /^[A-Za-z0-9][\w./-]*$/;
+  const rerun = new Set();
+  const busyRun = new Set();
+  let closed = false;
+
+  function runDirOf(j) {
+    if (!RUN_ID.test(j.run?.id ?? '')) throw new Error('bad run id');
+    for (const d of ['run', 'kept']) {
+      const dir = join(j.runRoot, '.exo', d, j.run.id);
+      if (existsSync(join(dir, 'state.json'))) return dir;
+    }
+    throw new Error(`no run state for ${j.run.id}`);
+  }
+
+  async function archive(j) {
+    const dir = runDirOf(j);
+    const plan = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')).plan;
+    const planDir = plan && join(j.runRoot, '.exo', 'run-plan', basename(plan).replace(/\.md$/, ''));
+    j.archived = await archiveRun(dataDir, j.id, { runDir: dir, runPlanDir: planDir && existsSync(planDir) ? planDir : undefined });
+    store.save(state);
+  }
+
+  function runFailed(j, reason) {
+    const phase = j.run.phase;
+    Object.assign(j, { status: ['stopped', 'crashed', 'refused'].includes(phase) ? phase : 'crashed', needsYou: { kind: 'run-failed', reason, phase, options: ['resume', 'retry', 'discard'] } });
+    store.save(state);
+  }
+
+  // why: the worktree goes only after the archive exists (M10); a removal failure never undoes the landing.
+  async function finishLanded(j, card, project) {
+    watchers.get(j.id)?.stop();
+    if (!j.archived) await archive(j);
+    delete j.needsYou;
+    Object.assign(j, { status: 'done', outcome: 'done' });
+    card.lane = 'Done';
+    store.save(state);
+    try {
+      await removeWorktree(pluginRoot, j.worktree, { checkout: project.path, archived: j.archived });
+      j.worktreeRemoved = true;
+    } catch (e) { j.removeError = e.message; }
+    store.save(state);
+  }
+
+  async function landOrCard(j, card, ...[project, base]) {
+    const r = await finishLand(project.path, base, j.run.branch);
+    if (r.ok) {
+      Object.assign(j.run, { phase: 'landed', landed: r.range });
+      return finishLanded(j, card, project);
+    }
+    Object.assign(j, { status: 'waiting', needsYou: { kind: 'land', text: r.text, action: r.action, base, options: ['retry'] } });
+    store.save(state);
+  }
+
+  async function baseOf(project) {
+    const head = await git('git', ['-C', project.path, 'symbolic-ref', '--short', 'HEAD']).then((r) => r.stdout.trim(), () => '');
+    return head || 'main';
+  }
+
+  async function parked(j, card, project) {
+    const { run } = j;
+    if (!SAFE_REF.test(run.branch ?? '')) throw new Error(`unsafe branch name: ${run.branch}`);
+    const d = await gateDetails(runDirOf(j), j.runRoot, await baseOf(project), run.branch);
+    const reasons = [run.reason ?? '', ...d.gates];
+    const landBase = reasons.map((x) => /cannot switch to ([^\s()]+)/.exec(x)?.[1]).find(Boolean);
+    if (landBase) {
+      if (!SAFE_REF.test(landBase)) throw new Error(`unsafe base name: ${landBase}`);
+      return landOrCard(j, card, project, landBase);
+    }
+    const conflict = reasons.some((x) => x.includes('rebase conflict'));
+    Object.assign(j, {
+      status: 'waiting',
+      needsYou: { kind: conflict ? 'conflict' : 'gate', ...d, base: await baseOf(project), worktree: j.worktree, options: conflict ? ['find-cause', 'manual', 'approve', 'reject'] : ['approve', 'reject'] },
+    });
+    card.lane = 'Review';
+    store.save(state);
+  }
+
+  async function gone(j) {
+    const { run } = j;
+    if (run.alive !== false) return;
+    const key = `${run.id}:gone`;
+    if (j.handled === key) return;
+    let reason = `the run process is gone in phase ${run.phase}`;
+    if (!run.resumed) {
+      run.resumed = true;
+      store.save(state);
+      const r = await resumeRun({ pluginRoot, cwd: j.runRoot, runId: run.id, parentEnv });
+      if (r.ok) { attach(j); rerun.add(j.id); return; }
+      reason = r.text;
+    }
+    j.handled = key;
+    runFailed(j, reason);
+  }
+
+  async function step(j) {
+    const { run } = j;
+    if (!run?.phase || closed) return;
+    const card = cardOf(j.cardId);
+    const project = projectOf(card);
+    if (run.phase !== 'parked' && !FINAL_RUN.has(run.phase)) return gone(j);
+    const key = `${run.id}:${run.phase}:${run.reason ?? ''}`;
+    if (j.handled === key || j.status === 'stopped') return;
+    j.handled = key;
+    if (run.phase === 'parked') return parked(j, card, project);
+    await archive(j);
+    if (run.phase === 'landed') return finishLanded(j, card, project);
+    if (run.phase === 'passed') {
+      Object.assign(j, { status: 'done', outcome: 'done' });
+      card.lane = 'Review';
+      return store.save(state);
+    }
+    if (run.phase === 'refused' && String(run.reason).startsWith('could not fast-forward')) return ffRefused(j, project);
+    runFailed(j, run.reason ?? `run ${run.phase}`);
+  }
+
+  const failCard = (j, e) => {
+    Object.assign(j, { status: 'crashed', outcome: 'crashed', needsYou: { kind: 'run-failed', reason: `deck error: ${e.message}`, phase: j.run?.phase, options: ['discard'] } });
+    store.save(state);
+  };
+
+  async function onRun(j) {
+    if (busyRun.has(j.id)) { rerun.add(j.id); return; }
+    busyRun.add(j.id);
+    try {
+      do {
+        rerun.delete(j.id);
+        await step(j).catch((e) => failCard(j, e));
+      } while (rerun.has(j.id) && !closed);
+    } finally { busyRun.delete(j.id); }
+  }
+
+  function attach(j) {
+    watchers.get(j.id)?.stop();
+    watchers.set(j.id, watchRun({ job: j, runRoot: j.runRoot, store, state, onChange: (x) => { onRun(x); } }));
+  }
+
+  const needs = (j, ...kinds) => {
+    if (!kinds.includes(j.needsYou?.kind) || approving.has(j.id)) throw fail(409, `job has no ${kinds.join(' or ')} card`);
+    return j.needsYou;
+  };
+  const resumed = (j, card) => {
+    for (const k of ['needsYou', 'outcome']) delete j[k];
+    delete j.handled;
+    Object.assign(j, { status: 'running' });
+    card.lane = 'Approved';
+    store.save(state);
+    attach(j);
+    return j;
+  };
+  async function again(id, kinds, call) {
+    const j = job(id);
+    needs(j, ...kinds);
+    approving.add(id);
+    try {
+      const r = await call(j);
+      if (!r.ok) throw fail(409, r.text);
+      return resumed(j, cardOf(j.cardId));
+    } finally { approving.delete(id); }
+  }
+
   const stopWith = (j, outcome, needsYou) => {
     Object.assign(j, { status: 'refused', outcome, needsYou });
     delete j.queued;
@@ -196,7 +367,7 @@ export function createApp({
     for (const k of ['needsYou', 'outcome', 'queued']) delete j[k];
     card.lane = 'Approved';
     store.save(state);
-    watchers.set(j.id, watchRun({ job: j, runRoot: cwd, store, state, onChange: (x) => { ffRefused(x, project).catch(() => {}); } }));
+    attach(j);
     return j;
   }
 
@@ -265,9 +436,47 @@ export function createApp({
     },
     async retry({ id }) {
       const j = job(id);
-      if (j.stage !== 'run' || !['refusal', 'setup'].includes(j.needsYou?.kind) || approving.has(id)) throw fail(409, 'job has nothing to retry');
+      if (j.stage !== 'run' || !['refusal', 'setup', 'run-failed'].includes(j.needsYou?.kind) || approving.has(id)) throw fail(409, 'job has nothing to retry');
       approving.add(id);
       try { return await startFor(Object.assign(j, { status: 'running' }), cardOf(j.cardId)); } finally { approving.delete(id); }
+    },
+    approveGate: ({ id }) => again(id, ['gate', 'conflict'], (j) => approveRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
+    resumeRunRoute: ({ id }) => again(id, ['run-failed'], (j) => resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
+    rejectGate({ id }) {
+      const j = job(id);
+      needs(j, 'gate', 'conflict');
+      delete j.needsYou;
+      j.status = 'stopped';
+      cardOf(j.cardId).lane = 'Shaped';
+      store.save(state);
+      return j;
+    },
+    async finishLandRoute({ id }) {
+      const j = job(id);
+      const { base } = needs(j, 'land');
+      const card = cardOf(j.cardId);
+      approving.add(id);
+      try { await landOrCard(j, card, projectOf(card), base); return j; } finally { approving.delete(id); }
+    },
+    async discard({ id }) {
+      const j = job(id);
+      needs(j, 'run-failed');
+      const card = cardOf(j.cardId);
+      approving.add(id);
+      try {
+        if (!j.archived) await archive(j);
+        await removeWorktree(pluginRoot, j.worktree, { checkout: projectOf(card).path, archived: j.archived });
+      } catch (e) { throw fail(409, e.message); } finally { approving.delete(id); }
+      delete j.needsYou;
+      Object.assign(j, { status: 'stopped', worktreeRemoved: true });
+      card.lane = 'Shaped';
+      store.save(state);
+      return j;
+    },
+    async diff({ id, url }) {
+      const j = job(id);
+      const { base } = needs(j, 'gate', 'conflict');
+      try { return { diff: await fileDiff(j.runRoot, base, j.run.branch, url.searchParams.get('file')) }; } catch (e) { throw fail(400, e.message); }
     },
     async reply({ id, body }) {
       const j = job(id);
@@ -323,9 +532,13 @@ export function createApp({
         const wrapped = { start: (o) => launch({ ...o }) };
         await reconcile({ store, state, supervisor: wrapped, claudePath, parentEnv });
       }
+      for (const j of state.jobs) {
+        if (j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot) { attach(j); onRun(j); }
+      }
       return { port: actual, url, reconciled: auth.ok };
     },
     async close() {
+      closed = true;
       for (const t of timers.values()) clearInterval(t);
       for (const w of watchers.values()) w.stop();
       await supervisor.stopAll();
