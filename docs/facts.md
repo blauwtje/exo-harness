@@ -73,3 +73,8 @@ Matches: `motion` 14.4.0, `@xyflow/react` 12.12.0, Tauri 2.12 (`@tauri-apps/cli`
 - Land: none: final phase `passed` (exit 0), run 20261021T104026-b9b4 from a linked worktree
   - gates: none
 
+
+## Phase 4 probes
+
+- Statusline cache probe (read once, 2026-10-21): `~/.cache/exo/statusline-rate-limits.json` is `{"cached_at":<epoch s, fractional>,"five_hour":{"resets_at":<epoch s>,"used_percentage":<number>},"seven_day":{"resets_at":…,"used_percentage":…}}`. The keys match Assumption 4; `used_percentage` is a percent (1 = 1%), so utilization is `used_percentage / 100`.
+- Limit-event probe: not observed live (no window was near its limit). The `rejected` event and the `usage_limit_reached` message stay as inferred in "Usage limits"; Decision 9 is unchanged. Capture one real hit from the user's terminal to confirm.

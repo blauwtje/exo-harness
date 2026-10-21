@@ -270,56 +270,56 @@
     "phase": 4,
     "kind": "feature",
     "title": "Full stage table in config/stages.json; routing per stage.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-02",
     "phase": 4,
     "kind": "feature",
     "title": "User settings file and Settings screen: ceilings, hard stop, concurrency, landing default and per-project override, scouts, overage toggle.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-03",
     "phase": 4,
     "kind": "feature",
     "title": "Usage from three sources, freshest wins, every rateLimitType tracked (S1).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-04",
     "phase": 4,
     "kind": "feature",
     "title": "Admission on projected cost: per-stage utilization ledger, p75 projection under the ceiling (S1).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-05",
     "phase": 4,
     "kind": "feature",
     "title": "Hard stop at the task boundary for exo runs (S1).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-06",
     "phase": 4,
     "kind": "feature",
     "title": "Overage guard enforced, explicit toggle as a gate (M7).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-07",
     "phase": 4,
     "kind": "feature",
     "title": "Queue: visible, reorderable FIFO, per-project priority, concurrency cap.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-08",
     "phase": 4,
     "kind": "feature",
     "title": "Limit hit in a -p job: queue paused, reset recorded, resume after the reset.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-09",
@@ -333,42 +333,42 @@
     "phase": 4,
     "kind": "feature",
     "title": "-p retries on infrastructure failures only, at most twice, failing line recorded (X1).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-11",
     "phase": 4,
     "kind": "feature",
     "title": "Budget dial writes --scope local, local file checked git-ignored (S11).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-12",
     "phase": 4,
     "kind": "feature",
     "title": "Budget raise gate.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-13",
     "phase": 4,
     "kind": "feature",
     "title": "Token ledger per job with cache fields and the idle cache-write flag; costUsd labeled an estimate (S2).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-14",
     "phase": 4,
     "kind": "feature",
     "title": "Offline detection: queue holds, UI usable, resumes when back.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-4-15",
     "phase": 4,
     "kind": "feature",
     "title": "Limit gauges with resume time; Stop all pauses the queue.",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "F-5-01",
@@ -557,7 +557,7 @@
     "phase": 4,
     "kind": "situation",
     "title": "Limit hit mid-job: Pauses the queue, records the reset time, resumes on its own after the reset",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-04",
@@ -592,14 +592,14 @@
     "phase": 4,
     "kind": "situation",
     "title": "Offline: Queues jobs, keeps the UI fully usable, resumes when back online",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-09",
     "phase": 4,
     "kind": "situation",
     "title": "Job loops (same failing line twice, no new commits): exo run: exo's no-progress or attempt-cap stop becomes a bug card with its Reason:; -p: stops at the second identical failing line, bug card",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-10",
@@ -641,14 +641,14 @@
     "phase": 4,
     "kind": "situation",
     "title": "Overage active (M7): Admits no new job, drains running ones, gauge shows overage, waits for the explicit toggle",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-16",
     "phase": 4,
     "kind": "situation",
     "title": "Mixed gates: limit gate plus another open gate (M8): No auto-approve; gate card listing every open gate",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "S-17",
@@ -718,7 +718,7 @@
     "phase": 4,
     "kind": "criterion",
     "title": "The queue never starts a job past the budget ceiling (fixture test with a simulated limit state).",
-    "status": "fail"
+    "status": "pass"
   },
   {
     "id": "C-06",
