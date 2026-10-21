@@ -1,3 +1,6 @@
+// Browser-safe module shared by the daemon and the deck: the one set of final job statuses.
+export const FINAL_STATUSES = new Set(['done', 'crashed', 'stopped', 'refused']);
+
 export function parseRateLimitEvent(event) {
   const info = event?.type === 'rate_limit_event' ? event.rate_limit_info : null;
   if (!info) return null;

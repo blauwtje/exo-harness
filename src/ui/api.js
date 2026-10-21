@@ -21,7 +21,7 @@ export function createApi(token) {
     try {
       res = await fetch(path, {
         method,
-        headers: { 'x-exo-token': token, ...(body !== undefined && { 'content-type': 'application/json' }) },
+        headers: { authorization: `Bearer ${token}`, ...(body !== undefined && { 'content-type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
@@ -41,6 +41,7 @@ export function createApi(token) {
     reply: (id, text) => call('POST', `/api/jobs/${encodeURIComponent(id)}/reply`, { text }),
     permission: ({ id, requestId, allow, ...extra }) =>
       call('POST', `/api/jobs/${encodeURIComponent(id)}/permission`, { requestId, allow, ...extra }),
+    continueJob: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/continue`, {}),
     stop: (id) => call('POST', `/api/jobs/${encodeURIComponent(id)}/stop`, {}),
     stopAll: () => call('POST', '/api/stop-all', {}),
     events: () => new EventSource(`/events?token=${encodeURIComponent(token)}`),

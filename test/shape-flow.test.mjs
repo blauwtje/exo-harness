@@ -70,10 +70,10 @@ async function boot(steps) {
   const app = createApp({ dataDir: join(dir, 'data'), claudePath: fakeClaude(dir, steps), pluginRoot: plugin(), parentEnv: { ...process.env } });
   mkdirSync(join(dir, 'data'), { recursive: true });
   const { port, url } = await app.start();
-  const token = new URL(url).searchParams.get('token');
+  const token = new URL(url).hash.replace(/^#token=/, '');
   const api = async (method, path, body) => {
     const res = await fetch(`http://127.0.0.1:${port}${path}`, {
-      method, headers: { 'x-exo-token': token, 'content-type': 'application/json' }, body: body && JSON.stringify(body),
+      method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body),
     });
     return { status: res.status, body: await res.json() };
   };

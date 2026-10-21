@@ -4,10 +4,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { loadStages } from './stages.mjs';
+import { FINAL_STATUSES as FINAL } from './usage.mjs';
 
 const run = promisify(execFile);
 const IDLE = new Set(['queued']);
-const FINAL = new Set(['done', 'crashed', 'stopped', 'refused']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const lstartOf = (pid) =>
@@ -48,11 +48,11 @@ const claudeSessionExists = (job) => {
 };
 
 export async function reconcile({
-  store, state, supervisor, sessionExists = claudeSessionExists, graceMs = loadStages().killGraceMs, ...sessionOpts
+  store, state, supervisor, sessionExists = claudeSessionExists, graceMs = loadStages().killGraceMs, skip = () => false, ...sessionOpts
 }) {
   const results = [];
   for (const job of state.jobs) {
-    if (FINAL.has(job.status) || IDLE.has(job.status)) continue;
+    if (FINAL.has(job.status) || IDLE.has(job.status) || skip(job)) continue;
     const crash = (why) => {
       Object.assign(job, { status: 'crashed', crashReason: why });
       delete job.pid;

@@ -59,7 +59,14 @@ export function createSupervisor({
       opts.onTurn?.(turn);
     };
     jobs.set(job.id, entry);
-    entry.sess = await sessionStarter({ ...opts, state, store: hooked, onTurn });
+    entry.ready = Promise.resolve(sessionStarter({ ...opts, state, store: hooked, onTurn }));
+    try {
+      entry.sess = await entry.ready;
+    } catch (err) {
+      jobs.delete(job.id);
+      syncCaffeine();
+      throw err;
+    }
     touch(entry);
     entry.sess.done.then(() => {
       clearTimeout(entry.timer);
@@ -92,6 +99,8 @@ export function createSupervisor({
       const entry = jobs.get(jobId);
       if (!entry) return;
       entry.pending.length = 0;
+      await entry.ready.catch(() => {});
+      if (!entry.sess) return;
       entry.sess.stop();
       await entry.sess.done;
     },

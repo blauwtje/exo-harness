@@ -67,7 +67,7 @@ try {
   const url = new URL(await daemon.url);
   const api = async (method, path, body) => {
     const res = await fetch(`${url.origin}${path}`, {
-      method, headers: { 'x-exo-token': url.searchParams.get('token'), 'content-type': 'application/json' }, body: body && JSON.stringify(body),
+      method, headers: { authorization: `Bearer ${url.hash.replace(/^#token=/, '')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body),
     });
     return { status: res.status, body: await res.json() };
   };

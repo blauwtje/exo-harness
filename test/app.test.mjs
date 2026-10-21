@@ -43,12 +43,12 @@ async function boot(auth = { loggedIn: true, authMethod: 'claude.ai' }, seed) {
   if (seed) writeFileSync(join(data, 'state.json'), JSON.stringify(seed));
   const app = createApp({ dataDir: data, claudePath: claude(dir, auth), pluginRoot: plugin(), parentEnv: { ...process.env } });
   const { port, url } = await app.start();
-  const token = new URL(url).searchParams.get('token');
+  const token = new URL(url).hash.replace(/^#token=/, '');
   const call = async (method, path, { body, headers }) => {
     const res = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { 'content-type': 'application/json', ...headers }, body: body && JSON.stringify(body) });
     return { status: res.status, body: await res.json() };
   };
-  const api = (method, path, body) => call(method, path, { body, headers: { 'x-exo-token': token } });
+  const api = (method, path, body) => call(method, path, { body, headers: { authorization: `Bearer ${token}` } });
   const raw = (method, path, headers) => call(method, path, { headers });
   return { app, api, raw, dir, port, token };
 }
@@ -75,9 +75,9 @@ test('F-2-01 every route needs the token and a loopback Host', async () => {
   try {
     for (const [m, path] of [['GET', '/api/state'], ['GET', '/api/health'], ['POST', '/api/stop-all'], ['GET', '/api/jobs/x/transcript']]) {
       assert.equal((await t.raw(m, path, {})).status, 401, path);
-      assert.equal((await t.raw(m, path, { 'x-exo-token': 'wrong' })).status, 401, path);
+      assert.equal((await t.raw(m, path, { authorization: 'Bearer wrong' })).status, 401, path);
     }
-    assert.equal((await t.raw('GET', '/api/state', { 'x-exo-token': t.token, origin: 'http://evil.example' })).status, 403);
+    assert.equal((await t.raw('GET', '/api/state', { authorization: `Bearer ${t.token}`, origin: 'http://evil.example' })).status, 403);
     assert.equal((await t.api('GET', '/api/jobs/x/transcript')).status, 404);
   } finally {
     await t.app.close();
@@ -130,10 +130,10 @@ test('F-2-01 the entry prints the token URL and serves it', async () => {
       child.stdout.once('data', (d) => resolve(String(d)));
       child.once('exit', (c) => reject(new Error(`exited ${c}`)));
     });
-    const url = /http:\/\/127\.0\.0\.1:\d+\/\?token=[0-9a-f]+/.exec(line)?.[0];
+    const url = /http:\/\/127\.0\.0\.1:\d+\/#token=[0-9a-f]+/.exec(line)?.[0];
     assert.ok(url, line);
     const u = new URL(url);
-    const res = await fetch(`${u.origin}/api/state`, { headers: { 'x-exo-token': u.searchParams.get('token') } });
+    const res = await fetch(`${u.origin}/api/state`, { headers: { authorization: `Bearer ${u.hash.replace(/^#token=/, '')}` } });
     assert.equal(res.status, 200);
     assert.equal((await fetch(`${u.origin}/api/state`)).status, 401);
   } finally {

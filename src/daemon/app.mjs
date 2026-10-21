@@ -10,10 +10,10 @@ import { createServer } from './server.mjs';
 import { isDone } from './shape-guard.mjs';
 import { createStore } from './store.mjs';
 import { createSupervisor } from './supervisor.mjs';
+import { FINAL_STATUSES as FINAL } from './usage.mjs';
 import { createWorktree } from './worktree.mjs';
 
 const git = promisify(execFile);
-const FINAL = new Set(['done', 'crashed', 'stopped', 'refused']);
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const text = (v, name) => {
   if (typeof v !== 'string' || !v.trim()) throw fail(400, `${name} is required`);
@@ -28,6 +28,7 @@ const ROUTES = [
   ['POST', '/api/cards/:id/shape', 'shape'],
   ['POST', '/api/jobs/:id/reply', 'reply'],
   ['POST', '/api/jobs/:id/permission', 'permission'],
+  ['POST', '/api/jobs/:id/continue', 'continue'],
   ['POST', '/api/jobs/:id/stop', 'stop'],
   ['POST', '/api/stop-all', 'stopAll'],
   ['GET', '/api/jobs/:id/transcript', 'transcript'],
@@ -47,7 +48,7 @@ function routeTable(handlers) {
 }
 
 export function createApp({
-  dataDir, claudePath = 'claude', pluginRoot, distDir = null, parentEnv = process.env, token = randomBytes(24).toString('hex'),
+  dataDir, claudePath = 'claude', pluginRoot, distDir = null, parentEnv = process.env, token = randomBytes(32).toString('hex'),
   onNeedsYou,
 }) {
   const baseStore = createStore(dataDir);
@@ -111,9 +112,15 @@ export function createApp({
     if (!auth.ok) throw fail(412, `${auth.reason}. Fix: ${auth.fix}`);
   }
 
+  async function reconcileAndCheck() {
+    const health = await checkHealth({ claudePath, pluginRoot, projectPath: state.projects[0]?.path, parentEnv });
+    if (health.claude?.ok) await reconcile({ store, state, supervisor: { start: (o) => launch({ ...o }) }, skip: (j) => sessions.has(j.id), claudePath, parentEnv });
+    return health;
+  }
+
   const handlers = {
     state: () => ({ ...state, pending: [...pending.values()] }),
-    health: () => checkHealth({ claudePath, pluginRoot, projectPath: state.projects[0]?.path, parentEnv }),
+    health: () => reconcileAndCheck(),
     async addProject({ body }) {
       const path = text(body.path, 'path');
       try {
@@ -165,6 +172,11 @@ export function createApp({
       store.save(state);
       return { ok: true };
     },
+    async continue({ id }) {
+      const j = job(id);
+      if (!supervisor.continue(id)) throw fail(409, 'job is not waiting at a turn cap');
+      return j;
+    },
     async stop({ id }) {
       const j = job(id);
       await supervisor.stop(id);
@@ -186,7 +198,7 @@ export function createApp({
     token, state, supervisor,
     async start(port = 0) {
       const actual = await server.listen(port);
-      const url = `http://127.0.0.1:${actual}/?token=${token}`;
+      const url = `http://127.0.0.1:${actual}/#token=${token}`;
       const auth = await checkAuth({ claudePath, parentEnv });
       if (auth.ok) {
         const wrapped = { start: (o) => launch({ ...o }) };

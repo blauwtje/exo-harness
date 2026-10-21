@@ -26,7 +26,10 @@ export function useDeck(token) {
       setEvents((m) => ({ ...m, [id]: [...list, ...extra] }));
       const r = latestRate(list);
       if (r) setRate((cur) => cur ?? r);
-    } catch { loaded.current.delete(id); }
+    } catch (e) {
+      loaded.current.delete(id);
+      setError(`Transcript failed to load: ${e.message}`);
+    }
   }, [api]);
 
   const refresh = useCallback(async () => {
@@ -41,7 +44,7 @@ export function useDeck(token) {
     }
   }, [api, loadTranscript]);
 
-  const refreshHealth = useCallback(() => api?.health().then(setHealth, () => {}), [api]);
+  const refreshHealth = useCallback(() => api?.health().then(setHealth, (e) => setError(`Health check failed: ${e.message}`)), [api]);
 
   useEffect(() => {
     if (!api) return undefined;

@@ -81,6 +81,7 @@ function QuestionBody({ item, deck, open }) {
 }
 
 function Body({ item, deck, open }) {
+  const resume = () => deck.act((api) => api.continueJob(item.job.id));
   const stop = () => deck.act((api) => api.stop(item.job.id));
   if (item.kind === 'question') return <QuestionBody item={item} deck={deck} open={open} />;
   if (item.kind === 'permission') {
@@ -113,10 +114,10 @@ function Body({ item, deck, open }) {
       <>
         <p className="said">Stopped for your review after <b className="num">{item.job.needsYou.turns}</b> turns.</p>
         <div className="actions">
-          <button className="btn btn-signal" onClick={stop}>Stop job</button>
+          <button className="btn btn-signal" onClick={resume}>Continue</button>
+          <button className="btn btn-quiet" onClick={stop}>Stop job</button>
           <button className="btn btn-quiet" onClick={open}>Open job</button>
         </div>
-        <p className="note">Continue is not exposed by the daemon yet.</p>
       </>
     );
   }

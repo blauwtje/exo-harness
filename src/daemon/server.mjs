@@ -67,7 +67,9 @@ export function createServer({ routes = {}, token, distDir = null }) {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const guarded = url.pathname.startsWith('/api/') || url.pathname === '/events';
       if (!guarded) return await serveFile(req, res, { distDir, pathname: url.pathname });
-      if (!sameToken(req.headers['x-exo-token'] ?? url.searchParams.get('token'), token)) {
+      const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
+      const given = url.pathname === '/events' ? (bearer ?? url.searchParams.get('token')) : bearer;
+      if (!sameToken(given, token)) {
         return sendJson(res, 401, { error: 'bad token' });
       }
       if (url.pathname === '/events' && req.method === 'GET') {

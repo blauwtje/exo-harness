@@ -1,8 +1,8 @@
-import { parseRateLimitEvent } from '../daemon/usage.mjs';
+import { FINAL_STATUSES, parseRateLimitEvent } from '../daemon/usage.mjs';
 
 export const LANES = ['Inbox', 'Shaped', 'Approved', 'Queued', 'Running', 'Review', 'Done'];
-export const FINAL = new Set(['done', 'crashed', 'stopped', 'refused']);
-export const isLive = (j) => !FINAL.has(j.status);
+export { FINAL_STATUSES as FINAL };
+export const isLive = (j) => !FINAL_STATUSES.has(j.status);
 
 export const latestJob = (state, cardId) => state.jobs.findLast((j) => j.cardId === cardId) ?? null;
 export const liveJob = (state, cardId) => state.jobs.findLast((j) => j.cardId === cardId && isLive(j)) ?? null;

@@ -16,8 +16,13 @@ const userLine = (text) => `${JSON.stringify({ type: 'user', message: { role: 'u
 const replyLine = (requestId, response) =>
   `${JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } })}\n`;
 
-const killGroup = (pgid, signal) => {
-  try { process.kill(-pgid, signal); } catch {}
+export const killGroup = (pgid, signal, report = console.error) => {
+  try {
+    process.kill(-pgid, signal);
+  } catch (err) {
+    // ESRCH: the group is already gone, which is what a kill wants. Anything else (EPERM) means it may still run.
+    if (err.code !== 'ESRCH') report(`exo-harness: kill -${pgid} ${signal} failed: ${err.code ?? err.message}`);
+  }
 };
 
 const textOf = (event) =>

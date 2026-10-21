@@ -30,7 +30,7 @@ const call = (path, { method = 'GET', headers = {}, body } = {}) => new Promise(
   req.on('error', reject);
   req.end(body);
 });
-const auth = { 'x-exo-token': TOKEN };
+const auth = { authorization: `Bearer ${TOKEN}` };
 
 test('binds 127.0.0.1 only', () => {
   assert.equal(app.server.address().address, '127.0.0.1');
@@ -38,7 +38,7 @@ test('binds 127.0.0.1 only', () => {
 
 test('token: missing and wrong are 401, right passes', async () => {
   assert.equal((await call('/api/ping')).status, 401);
-  assert.equal((await call('/api/ping', { headers: { 'x-exo-token': 'nope' } })).status, 401);
+  assert.equal((await call('/api/ping', { headers: { authorization: 'Bearer nope' } })).status, 401);
   const ok = await call('/api/ping', { headers: auth });
   assert.equal(ok.status, 200);
   assert.deepEqual(JSON.parse(ok.text), { pong: true });
