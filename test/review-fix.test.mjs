@@ -40,7 +40,7 @@ async function boot(scenario) {
   chmodSync(claude, 0o755);
   const r = repos();
   const brief = join(r.worktree, 'plan.md');
-  writeFileSync(brief, '# Plan\nBranch: feat-x2\nLand: none\n');
+  writeFileSync(brief, '# Plan\n\n## Plan basis\nBranch: feat-x2\nLand: none\n');
   const scenarioFile = join(base, 'scenario.json');
   writeFileSync(scenarioFile, JSON.stringify(scenario));
   const data = join(base, 'data');

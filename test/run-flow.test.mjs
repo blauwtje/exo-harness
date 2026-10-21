@@ -28,7 +28,7 @@ async function boot({ land = 'none', scenario = {}, project: asProject, projectE
   const { dir: main, g } = repo();
   const worktree = tmp('rf-wt-');
   const brief = join(worktree, 'plan.md');
-  writeFileSync(brief, `# Plan\nBranch: feat-x\nLand: ${land}\n`);
+  writeFileSync(brief, `# Plan\n\n## Plan basis\nBranch: feat-x\nLand: ${land}\n`);
   const scenarioFile = join(base, 'scenario.json');
   writeFileSync(scenarioFile, JSON.stringify(scenario));
   const data = join(base, 'data');
@@ -164,7 +164,7 @@ test('F-3-13 the exo repo runs from its main checkout and only with Land: local'
     assert.equal((await t.api('POST', '/api/cards/c1/approve')).status, 200);
     const j = t.runJob();
     assert.match(j.needsYou.text, /Land: local/);
-    writeFileSync(j.brief, '# Plan\nBranch: feat-x\nLand: local\n');
+    writeFileSync(j.brief, '# Plan\n\n## Plan basis\nBranch: feat-x\nLand: local\n');
     assert.equal((await t.api('POST', `/api/jobs/${j.id}/retry`)).status, 200);
     assert.equal(j.status, 'running');
     assert.equal(j.runRoot, root);

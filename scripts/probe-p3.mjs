@@ -44,11 +44,42 @@ function scratch() {
   return { base, repo };
 }
 
+// why: a run plan is the exo plan format plan-check accepts; `Land: none` is no Land: line, Land: local also needs a Commit: line, and Branch: is the linked worktree's branch.
+function planText(repo, land) {
+  const landLines = land === 'none' ? '' : `Land: ${land}\nCommit: chore(probe): add hello.txt\n`;
+  return `# Probe ${land}
+
+## Goal
+Add one file, hello.txt, so a detached exo run lands a single task from a linked worktree.
+
+## Plan basis
+Repository: ${repo}
+Branch: wt-${land}
+Land gate: test -f hello.txt
+${landLines}Lint: none
+App: none
+
+## Success criterion
+\`grep -qx hello hello.txt\`
+Product run: none (a probe file, no product)
+
+## Checkpoint
+- Blocks first: Task 1.
+- Parallel: none.
+- Shared state: none.
+- Smallest safe split: one task.
+
+## Tasks
+### Task 1: chore(probe): add hello.txt
+Depends on: none | Files: \`hello.txt\` | Data: a file holding "hello" | Red: none (a probe file with no production change) | Proof: test -f hello.txt
+`;
+}
+
 function addPlan(repo, land) {
   const dir = join(repo, 'docs', 'plans');
   mkdirSync(dir, { recursive: true });
   const plan = join(dir, `probe-${land}.md`);
-  writeFileSync(plan, `# Probe ${land}\nBranch: probe-${land}\nLand: ${land}\n\n### Task 1: add hello.txt\nFiles: \`hello.txt\` | Data: a file holding "hello" | Proof: test -f hello.txt\n`);
+  writeFileSync(plan, planText(repo, land));
   git(repo, 'add', '-A');
   git(repo, 'commit', '-m', `plan ${land}`);
   git(repo, 'push', 'origin', 'main');
@@ -74,6 +105,14 @@ async function finalState(wt, id) {
   return null;
 }
 
+// why: exo ends a refused run as phase `refused`; its reason is a `run-plan: refused: ...` line in the live log, else the state's reason.
+function refusalReason(wt, state) {
+  const live = join(wt, '.exo', 'run', 'live.log');
+  const lines = existsSync(live) ? readFileSync(live, 'utf8').split('\n') : [];
+  const line = lines.reverse().find((l) => l.includes('refused:'));
+  return line ? line.slice(line.indexOf('refused:') + 'refused:'.length).trim() : (state.reason ?? 'no reason recorded');
+}
+
 async function probe(repo, base, land) {
   const plan = addPlan(repo, land);
   const wt = join(base, `wt-${land}`);
@@ -84,6 +123,7 @@ async function probe(repo, base, land) {
   if (r.status !== 0 || !id) return `- Land: ${land}: exo run refused or failed to start (exit ${r.status}): ${out}`;
   const done = await finalState(wt, id);
   if (!done) return `- Land: ${land}: run ${id} reached no final phase within ${waitMs} ms`;
+  if (done.state.phase === 'refused') return `- Land: ${land}: exo refused the run ${id} (exit ${done.state.exitCode}): ${refusalReason(wt, done.state)}; no fact about linked worktrees`;
   const gatesFile = join(done.dir, 'gates.md');
   const gates = existsSync(gatesFile) ? readFileSync(gatesFile, 'utf8').split('\n').filter(Boolean) : [];
   const detail = gates.length ? gates.map((g) => `  - gate: \`${g}\``).join('\n') : '  - gates: none';

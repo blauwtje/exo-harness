@@ -27,7 +27,7 @@ const next = async (type) => { for (;;) { const { value, done } = await rl.next(
   out({ type: 'control_request', request_id: 'r1', request: { subtype: 'can_use_tool', tool_name: 'AskUserQuestion', input: { questions: [{ question: 'A or B?', options: [{ label: 'A' }, { label: 'B' }] }] } } });
   await next('control_response');
   fs.mkdirSync('docs/specs', { recursive: true });
-  fs.writeFileSync('docs/specs/greet.md', '# Greet\\nBranch: feat-greet\\nLand: local\\n');
+  fs.writeFileSync('docs/specs/greet.md', '# Greet\\n\\n## Plan basis\\nBranch: feat-greet\\nLand: local\\n');
   out({ type: 'assistant', message: { content: [{ type: 'text', text: 'Brief written: docs/specs/greet.md' }] } });
   out({ type: 'result', subtype: 'success' });
   await next('never');

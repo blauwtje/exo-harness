@@ -32,6 +32,17 @@ test('F-3-01 the probe runs the fake exo from linked worktrees and writes ## Pro
   assert.equal(readFileSync(facts, 'utf8').match(/^## Probe P3$/gm).length, 1);
 });
 
+test('F-3-01 the probe records a refused run as a refusal with exo\'s reason, not as a final phase', () => {
+  const facts = factsFile();
+  const reason = "the plan's '## Plan basis' names no Branch:";
+  const r = run({ FAKE_EXO_SCENARIO: JSON.stringify({ id: 'p-2', phase: 'refused', reason }) }, facts);
+  assert.equal(r.status, 0, r.stderr);
+  const text = readFileSync(facts, 'utf8');
+  assert.match(text, /^## Probe P3$/m);
+  assert.match(text, /Land: local: exo refused the run p-2 \(exit 3\): the plan's '## Plan basis' names no Branch:/);
+  assert.doesNotMatch(text, /final phase `refused`/);
+});
+
 test('F-3-01 the probe refuses under CLAUDECODE and writes nothing', () => {
   const facts = factsFile();
   const r = run({ CLAUDECODE: '1' }, facts);

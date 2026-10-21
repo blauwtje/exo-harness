@@ -54,7 +54,7 @@ const USAGE = ${JSON.stringify(USAGE)};
       fs.writeFileSync('reply.txt', (await next('user')).message.content);
     } else if (step === 'brief') {
       fs.mkdirSync('docs/specs', { recursive: true });
-      fs.writeFileSync('docs/specs/greet.md', '# Greet\\nBranch: greet\\nLand: local\\n');
+      fs.writeFileSync('docs/specs/greet.md', '# Greet\\n\\n## Plan basis\\nBranch: greet\\nLand: local\\n');
       say('Brief written: docs/specs/greet.md');
       out(Object.assign({ type: 'result', subtype: 'success', num_turns: 1 }, USAGE));
     }

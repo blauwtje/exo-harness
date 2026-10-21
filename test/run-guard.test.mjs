@@ -23,7 +23,7 @@ function repo() {
 
 test('F-3-03 S-19 readPlan reads Branch and Land', async () => {
   const f = join(tmp(), 'b.md');
-  writeFileSync(f, '# Plan\nBranch: feat/x\nLand: local\n');
+  writeFileSync(f, '# Plan\n\n## Plan basis\nBranch: feat/x\nLand: local\n');
   assert.deepEqual(await readPlan(f), { branch: 'feat/x', land: 'local' });
 });
 

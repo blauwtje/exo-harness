@@ -54,7 +54,7 @@ function shapedRepo() {
   writeFileSync(join(worktree, 'a.txt'), 'two\n');
   gitIn(worktree)('commit', '-q', '-am', 'feat');
   const brief = join(worktree, 'plan.md');
-  writeFileSync(brief, '# Plan\nBranch: feat-x2\nLand: none\n');
+  writeFileSync(brief, '# Plan\n\n## Plan basis\nBranch: feat-x2\nLand: none\n');
   return { main, worktree, brief };
 }
 
