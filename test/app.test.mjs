@@ -140,3 +140,22 @@ test('F-2-01 the entry prints the token URL and serves it', async () => {
     child.kill('SIGTERM');
   }
 });
+
+test('F-3-14 S-05 the failure inbox lists exo-run jobs with their outcome', async () => {
+  const seed = {
+    projects: [{ key: 'local/p', path: '/x', origin: null }],
+    cards: [{ id: 'c1', projectKey: 'local/p', title: 'T', lane: 'Review' }],
+    jobs: [
+      { id: 'r1', cardId: 'c1', stage: 'run', status: 'waiting', run: { id: 'x', phase: 'parked' } },
+      { id: 'r2', cardId: 'c1', stage: 'run', status: 'crashed', outcome: 'setup' },
+      { id: 'r3', cardId: 'c1', stage: 'run', status: 'done', run: { id: 'y', phase: 'passed' } },
+    ],
+  };
+  const t = await boot(undefined, seed);
+  try {
+    const res = await t.api('GET', '/api/inbox');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.map((i) => [i.jobId, i.outcome]), [['r1', 'question'], ['r2', 'setup']]);
+    assert.equal((await t.raw('GET', '/api/inbox')).status, 401);
+  } finally { await t.app.close(); }
+});

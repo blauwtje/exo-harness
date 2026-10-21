@@ -13,6 +13,7 @@ import { fileDiff, finishLand, gateDetails } from './run-gate.mjs';
 import { checkCollision, checkProvider, readPlan, runCwd } from './run-guard.mjs';
 import { watchRun } from './run-watch.mjs';
 import { runSetup } from './setup.mjs';
+import { failureInbox } from './outcomes.mjs';
 import { createServer } from './server.mjs';
 import { isDone } from './shape-guard.mjs';
 import { createStore } from './store.mjs';
@@ -36,6 +37,8 @@ const ROUTES = [
   ['POST', '/api/cards/:id/shape', 'shape'],
   ['POST', '/api/cards/:id/approve', 'approve'],
   ['POST', '/api/cards/:id/reject', 'reject'],
+  ['POST', '/api/cards/:id/find-cause', 'findCause'],
+  ['GET', '/api/inbox', 'inbox'],
   ['POST', '/api/jobs/:id/retry', 'retry'],
   ['POST', '/api/jobs/:id/finish-land', 'finishLandRoute'],
   ['POST', '/api/jobs/:id/approve-gate', 'approveGate'],
@@ -97,9 +100,19 @@ export function createApp({
     (await sessions.get(j.id))?.end();
   }
 
+  // why: Decision 15; a find-cause job is done on a `done` turn and its last text is the summary.
+  async function finishCause(j, turn) {
+    if (turn.class !== 'done') return wait(j, turn.class === 'question' ? { question: turn.questions } : { lastText: turn.text });
+    delete j.question;
+    Object.assign(j, { status: 'done', summary: turn.text });
+    store.save(state);
+    (await sessions.get(j.id))?.end();
+  }
+
   function sessionOpts(j, card) {
+    const turnOf = j.stage === 'find-cause' ? (turn) => finishCause(j, turn) : (turn) => finishOrWait(j, card, turn);
     return {
-      onTurn: (turn) => finishOrWait(j, card, turn).catch((e) => wait(j, { lastText: e.message })),
+      onTurn: (turn) => turnOf(turn).catch((e) => wait(j, { lastText: e.message })),
       onAsk: (requestId, request, d) => {
         pending.set(requestId, { jobId: j.id, requestId, request, card: d.card });
         wait(j, {});
@@ -401,6 +414,20 @@ export function createApp({
       Object.assign(j, { worktree: wt.path, startedAt: Date.now() });
       store.save(state);
       await launch({ store, state, job: j, card, worktree: wt.path, mode: 'start' });
+      return j;
+    },
+    inbox: () => failureInbox(state, baseStore),
+    async findCause({ id, body }) {
+      const card = cardOf(id);
+      if (state.jobs.some((x) => x.cardId === id && x.stage !== 'run' && !FINAL.has(x.status))) throw fail(409, 'card already has a running job');
+      const from = body?.jobId === undefined ? state.jobs.findLast((x) => x.cardId === id && x.worktree) : job(body.jobId);
+      if (body?.jobId !== undefined && (from.cardId !== id || from.needsYou?.kind !== 'conflict')) throw fail(409, 'job is not a conflict gate of this card');
+      if (!from?.worktree || !existsSync(from.worktree)) throw fail(409, 'card has no worktree to inspect');
+      await gateAuth();
+      const j = addJob(state, { cardId: id, stage: 'find-cause' });
+      Object.assign(j, { worktree: from.worktree, startedAt: Date.now() });
+      store.save(state);
+      await launch({ store, state, job: j, card, worktree: from.worktree, mode: 'start' });
       return j;
     },
     async approve({ id }) {
