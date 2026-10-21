@@ -112,9 +112,14 @@ export function createApp({
     if (!auth.ok) throw fail(412, `${auth.reason}. Fix: ${auth.fix}`);
   }
 
+  let reconciling = null;
+  const reconcileOnce = () => (reconciling ??= reconcile({
+    store, state, supervisor: { start: (o) => launch({ ...o }) }, skip: (j) => sessions.has(j.id), claudePath, parentEnv,
+  }).finally(() => { reconciling = null; }));
+
   async function reconcileAndCheck() {
     const health = await checkHealth({ claudePath, pluginRoot, projectPath: state.projects[0]?.path, parentEnv });
-    if (health.claude?.ok) await reconcile({ store, state, supervisor: { start: (o) => launch({ ...o }) }, skip: (j) => sessions.has(j.id), claudePath, parentEnv });
+    if (health.claude?.ok) await reconcileOnce();
     return health;
   }
 
