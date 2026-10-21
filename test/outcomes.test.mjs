@@ -28,6 +28,8 @@ test('limit detection', () => {
   assert.equal(isLimitStream([rate('allowed_warning')]), true);
   assert.equal(isLimitStream([{ type: 'assistant', api_error: 'usage_limit_reached' }]), true);
   assert.equal(isLimitStream([{ type: 'result', api_error_status: 429 }]), true);
+  assert.equal(isLimitStream([{ type: 'assistant', error: 'rate_limit', apiErrorStatus: 429, apiError: 'usage_limit_reached' }]), true);
+  assert.equal(isLimitStream([{ type: 'assistant', error: 'rate_limit' }]), true);
 });
 
 test('inbox lists non-done jobs with their last 20 events', () => {

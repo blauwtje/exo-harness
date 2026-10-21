@@ -15,7 +15,7 @@ export function isLimitStream(events) {
   return events.some((e) => {
     const info = e?.type === 'rate_limit_event' ? e.rate_limit_info : null;
     if (info && info.status !== 'allowed') return true;
-    return Boolean(e?.api_error) || e?.api_error_status === 429;
+    return Boolean(e?.api_error ?? e?.apiError) || e?.error === 'rate_limit' || [e?.api_error_status, e?.apiErrorStatus].includes(429);
   });
 }
 

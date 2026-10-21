@@ -214,3 +214,14 @@ test('F-4-10 Decision 7 a -p retry under active overage is queued with its reaso
     assert.equal(j.bugCard, undefined);
   } finally { await t.app.close(); }
 });
+
+test('F-4-15 the state carries the statusline reading so the gauge shows it before any job runs', async () => {
+  const t = await boot({ cache: 60 });
+  try {
+    const { usage } = (await t.api('GET', '/api/state')).body;
+    assert.equal(usage.five_hour.utilization, 0.6);
+    assert.ok(usage.five_hour.resetsAt > nowSec());
+  } finally {
+    await t.app.close();
+  }
+});

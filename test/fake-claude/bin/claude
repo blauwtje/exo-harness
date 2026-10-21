@@ -26,7 +26,10 @@ if (process.env.FAKE_CLAUDE_LIMIT) {
   }
   const event = type === 'rejected'
     ? { type: 'rate_limit_event', rate_limit_info: { status: 'rejected', rateLimitType, resetsAt } }
-    : { type: 'assistant', error: 'usage_limit_reached', rateLimitType, resetsAt, message: { role: 'assistant', content: [{ type: 'text', text: 'usage limit reached' }] } };
+    : {
+      type: 'assistant', error: 'rate_limit', apiErrorStatus: 429, apiError: 'usage_limit_reached', apiErrorParams: { rate_limit_info: { status: 'rejected', rateLimitType, resetsAt } },
+      message: { role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: "You've hit your session limit" }] },
+    };
   process.stdout.write(`${JSON.stringify(event)}\n`);
   process.exit(1);
 }

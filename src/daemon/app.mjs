@@ -592,7 +592,7 @@ export function createApp({
   }
 
   const handlers = {
-    state: () => ({ ...state, pending: [...pending.values()] }),
+    state: () => ({ ...state, pending: [...pending.values()], usage: usageNow() }),
     health: () => reconcileAndCheck(),
     async addProject({ body }) {
       const path = text(body.path, 'path');

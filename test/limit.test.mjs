@@ -86,3 +86,14 @@ test('S-03 a second hit replaces the first timer', () => {
   c.advance(100000);
   assert.equal(q.snapshot().paused, null);
 });
+
+test('F-4-08 detects the real refused-call record, error rate_limit with the window in apiErrorParams', () => {
+  const info = { status: 'rejected', resetsAt: 1792577400, rateLimitType: 'five_hour', overageStatus: 'rejected', isUsingOverage: false };
+  const event = {
+    type: 'assistant', error: 'rate_limit', apiErrorStatus: 429, isApiErrorMessage: true, apiError: 'usage_limit_reached', apiErrorParams: { rate_limit_info: info }, quotaLimits: info,
+    message: { model: '<synthetic>', content: [{ type: 'text', text: "You've hit your session limit · resets 12:10pm (Europe/Amsterdam)" }] },
+  };
+  assert.deepEqual(detectLimit(event), { rateLimitType: 'five_hour', resetsAt: 1792577400 });
+  assert.deepEqual(detectLimit({ type: 'assistant', api_error: 'usage_limit_reached', api_error_params: { rate_limit_info: info } }), { rateLimitType: 'five_hour', resetsAt: 1792577400 });
+  assert.deepEqual(detectLimit({ type: 'assistant', error: 'rate_limit', message: {} }), { rateLimitType: null, resetsAt: null });
+});

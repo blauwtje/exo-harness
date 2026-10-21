@@ -1,13 +1,14 @@
+const LIMIT_ERRORS = new Set(['rate_limit', 'usage_limit_reached']);
+
 export function detectLimit(event) {
   const info = event?.type === 'rate_limit_event' ? event.rate_limit_info : null;
   if (info?.status === 'rejected') {
     const type = info.rateLimitType ?? null;
     return { rateLimitType: type, resetsAt: info.resetsAt ?? info.unifiedWindows?.[type]?.resetsAt ?? null };
   }
-  if (event?.type === 'assistant' && event.error === 'usage_limit_reached') {
-    return { rateLimitType: event.rateLimitType ?? null, resetsAt: event.resetsAt ?? null };
-  }
-  return null;
+  if (event?.type !== 'assistant' || ![event.error, event.apiError, event.api_error].some((e) => LIMIT_ERRORS.has(e))) return null;
+  const params = (event.apiErrorParams ?? event.api_error_params)?.rate_limit_info ?? event.quotaLimits ?? event;
+  return { rateLimitType: params.rateLimitType ?? null, resetsAt: params.resetsAt ?? null };
 }
 
 const defaultJitter = () => 5000 + Math.floor(Math.random() * 55001);

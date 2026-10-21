@@ -69,7 +69,7 @@ export default function Gauges({ rate, offline, state, api }) {
   return (
     <div className="gauges" role="group" aria-label="Usage limits">
       {[...WINDOWS, ...extra].map(([id, label, ceilingKey]) => (
-        <Gauge key={id} id={id} label={label} window={rate?.windows?.[id]} offline={offline}
+        <Gauge key={id} id={id} label={label} window={rate?.windows?.[id] ?? state?.usage?.[id]} offline={offline}
           ceiling={settings?.ceilings?.[ceilingKey]} hold={offline ? null : holdOf(id, state)} />
       ))}
       {overage && !offline ? <p className="g-overage" role="status">Overage active{overage.resetsAt ? <>, {reset(overage.resetsAt)}</> : null}</p> : null}
