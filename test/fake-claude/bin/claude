@@ -33,6 +33,15 @@ if (process.env.FAKE_CLAUDE_LIMIT) {
   process.exit(1);
 }
 
+// FAKE_CLAUDE_FAIL: 'noresult' ends the stream with no result event; 'overloaded' emits an overloaded_error. Both exit 1.
+if (process.env.FAKE_CLAUDE_FAIL) {
+  const kind = process.env.FAKE_CLAUDE_FAIL;
+  const out = (e) => process.stdout.write(`${JSON.stringify(e)}\n`);
+  out({ type: 'system', subtype: 'init' });
+  if (kind === 'overloaded') out({ type: 'assistant', error: 'api_error', message: { role: 'assistant', content: [{ type: 'text', text: 'overloaded_error' }] } });
+  process.exit(1);
+}
+
 const scenarioPath = process.env.FAKE_CLAUDE_SCENARIO;
 if (!scenarioPath) {
   process.stderr.write('fake claude: FAKE_CLAUDE_SCENARIO is not set\n');
