@@ -10,6 +10,7 @@ import { checkHealth } from './health.mjs';
 import { createLimitTimer, detectLimit } from './limit.mjs';
 import { addCard, addJob, addProject } from './model.mjs';
 import { createQueue } from './queue.mjs';
+import { createOfflineProbe } from './offline.mjs';
 import { reconcile } from './reconcile.mjs';
 import { archiveRun, removeWorktree } from './archive.mjs';
 import { FINAL_PHASES, approveRun, holderDone, resumeRun, startRun } from './exo-run.mjs';
@@ -97,7 +98,7 @@ function routeTable(handlers) {
 
 export function createApp({
   dataDir, claudePath = 'claude', pluginRoot, distDir = null, parentEnv = process.env, token = randomBytes(32).toString('hex'),
-  onNeedsYou, statuslinePath, drainMs = 5000, limitOptions = {},
+  onNeedsYou, statuslinePath, drainMs = 5000, limitOptions = {}, offlineOptions = {},
 }) {
   const baseStore = createStore(dataDir);
   const state = baseStore.load();
@@ -164,6 +165,13 @@ export function createApp({
     queue: { ...qm, resume: (reason) => { qm.resume(reason); store.save(state); drain(); } },
     setTimer: (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); limitTimers.add(t); return t; },
     ...limitOptions,
+  });
+
+  const offlineTimers = new Set();
+  const offlineProbe = createOfflineProbe({
+    queue: { ...qm, resume: (reason) => { qm.resume(reason); store.save(state); drain(); }, pause: (cause) => { qm.pause(cause); store.save(state); } },
+    setTimer: (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); offlineTimers.add(t); return t; },
+    ...offlineOptions,
   });
 
   function limitHit(jobId, hit) {
@@ -828,6 +836,7 @@ export function createApp({
         if (j.status === 'queued') { delete j.queued?.holder; qm.enqueue(j.id); }
       }
       limiter.restore();
+      await offlineProbe.start();
       hardStop = watchHardStop({ getUsage: usageNow, settings: settingsNow, runs: liveRuns });
       drainTimer = setInterval(drain, drainMs);
       drainTimer.unref();
@@ -838,6 +847,8 @@ export function createApp({
       closed = true;
       clearInterval(drainTimer);
       hardStop?.stop();
+      offlineProbe.stop();
+      for (const t of offlineTimers) clearTimeout(t);
       for (const t of limitTimers) clearTimeout(t);
       for (const t of timers.values()) clearInterval(t);
       for (const w of watchers.values()) w.stop();
