@@ -3,9 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
+import { admit } from './admission.mjs';
 import { checkAuth } from './auth.mjs';
+import { watchHardStop } from './hard-stop.mjs';
 import { checkHealth } from './health.mjs';
+import { createLimitTimer, detectLimit } from './limit.mjs';
 import { addCard, addJob, addProject } from './model.mjs';
+import { createQueue } from './queue.mjs';
 import { reconcile } from './reconcile.mjs';
 import { archiveRun, removeWorktree } from './archive.mjs';
 import { FINAL_PHASES, approveRun, holderDone, resumeRun, startRun } from './exo-run.mjs';
@@ -13,13 +17,15 @@ import { fileDiff, finishLand, gateDetails } from './run-gate.mjs';
 import { checkCollision, checkProvider, readPlan, runCwd } from './run-guard.mjs';
 import { watchRun } from './run-watch.mjs';
 import { runSetup } from './setup.mjs';
+import { loadSettings, saveSettings } from './settings.mjs';
 import { failureInbox } from './outcomes.mjs';
 import { createServer } from './server.mjs';
 import { isDone } from './shape-guard.mjs';
 import { createStore } from './store.mjs';
 import { loadStages } from './stages.mjs';
 import { createSupervisor } from './supervisor.mjs';
-import { FINAL_STATUSES as FINAL } from './usage.mjs';
+import { FINAL_STATUSES as FINAL, parseRateLimitEvent } from './usage.mjs';
+import { mergeUsage, readIterLogUsage, readStatuslineCache, usageFromEvent } from './usage-sources.mjs';
 import { createWorktree } from './worktree.mjs';
 
 const git = promisify(execFile);
@@ -51,6 +57,12 @@ const ROUTES = [
   ['POST', '/api/jobs/:id/continue', 'continue'],
   ['POST', '/api/jobs/:id/stop', 'stop'],
   ['POST', '/api/stop-all', 'stopAll'],
+  ['GET', '/api/settings', 'getSettings'],
+  ['PUT', '/api/settings', 'putSettings'],
+  ['GET', '/api/queue', 'getQueue'],
+  ['POST', '/api/queue/reorder', 'reorderQueue'],
+  ['POST', '/api/queue/priority', 'prioritize'],
+  ['POST', '/api/queue/resume', 'resumeQueue'],
   ['GET', '/api/jobs/:id/transcript', 'transcript'],
 ].map(([method, path, name]) => ({ method, name, re: new RegExp(`^${path.replace(':id', '([^/]+)')}$`) }));
 
@@ -69,7 +81,7 @@ function routeTable(handlers) {
 
 export function createApp({
   dataDir, claudePath = 'claude', pluginRoot, distDir = null, parentEnv = process.env, token = randomBytes(32).toString('hex'),
-  onNeedsYou,
+  onNeedsYou, statuslinePath, drainMs = 5000, limitOptions = {},
 }) {
   const baseStore = createStore(dataDir);
   const state = baseStore.load();
@@ -80,11 +92,110 @@ export function createApp({
   const store = {
     ...baseStore,
     save: (s) => { baseStore.save(s); push('state', s); },
-    appendEvent: (jobId, event) => { baseStore.appendEvent(jobId, event); push('event', { jobId, event }); },
+    appendEvent: (jobId, event) => { baseStore.appendEvent(jobId, event); push('event', { jobId, event }); observe(jobId, event); },
   };
   const supervisor = createSupervisor({
     store, state, onNeedsYou: onNeedsYou ?? ((job, needs) => push('needs-you', { jobId: job.id, needs })),
   });
+
+  // why: Decisions 6, 7, 9, 15, 16; every job start asks `admit` and a refusal leaves a queued job with its reason.
+  const qm = createQueue(state);
+  // why: the entry passes the real statusline cache; without it only stream events and iter logs count, so tests never read the user's own usage.
+  const cachePath = statuslinePath ?? null;
+  let eventUsage = {};
+  let overage = null;
+  // why: only an explicit toggle lifts overage (Decision 7), so settings reach admission with it false.
+  const settingsNow = () => ({ ...loadSettings(dataDir), overageAllowed: false });
+  const liveRuns = () => state.jobs.filter((j) => j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot);
+  const usageNow = () => ({
+    ...mergeUsage(eventUsage, (cachePath ? readStatuslineCache(cachePath) : {}), ...[...new Set(liveRuns().map((j) => j.runRoot))].map(readIterLogUsage)),
+    overage,
+  });
+  const runningCount = (except) => state.jobs.filter((j) => j.id !== except && ['starting', 'running'].includes(j.status)).length;
+  const check = (stage, except) => admit({ stage, usage: usageNow(), settings: settingsNow(), history: state.utilizationHistory, running: runningCount(except), queue: qm.snapshot() });
+
+  function holdBack(j, v, extra = {}) {
+    Object.assign(j, { status: 'queued', queued: { ...extra, reason: v.reason, rateLimitType: v.rateLimitType, resetsAt: v.resetsAt } });
+    qm.enqueue(j.id);
+    store.save(state);
+    return j;
+  }
+
+  function observe(jobId, event) {
+    const at = Date.now();
+    eventUsage = mergeUsage(eventUsage, usageFromEvent(event, at));
+    const parsed = parseRateLimitEvent(event, at);
+    if (parsed) overage = { ...parsed.overage, resetsAt: parsed.windows[parsed.rateLimitType]?.resetsAt ?? null };
+    const hit = detectLimit(event);
+    if (hit) limitHit(jobId, hit);
+  }
+
+  const limitTimers = new Set();
+  const limiter = createLimitTimer({
+    queue: { ...qm, resume: (reason) => { qm.resume(reason); store.save(state); drain(); } },
+    setTimer: (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); limitTimers.add(t); return t; },
+    ...limitOptions,
+  });
+
+  function limitHit(jobId, hit) {
+    const j = state.jobs.find((x) => x.id === jobId);
+    if (!j || FINAL.has(j.status)) return;
+    limiter.hit(hit);
+    Object.assign(j, { status: 'queued', limitHit: hit, queued: { reason: 'paused', rateLimitType: hit.rateLimitType, resetsAt: hit.resetsAt } });
+    qm.enqueue(j.id);
+    store.save(state);
+    supervisor.stop(j.id).catch(() => {});
+  }
+
+  // why: a queued job names why it waits, so the gauge can show the ceiling and the resume time.
+  function refresh() {
+    let changed = false;
+    for (const id of qm.snapshot().order) {
+      const j = state.jobs.find((x) => x.id === id);
+      if (j?.status !== 'queued' || j.queued?.holder) continue;
+      const v = check(j.stage, j.id);
+      if (v.ok) continue;
+      const next = { ...j.queued, reason: v.reason, rateLimitType: v.rateLimitType, resetsAt: v.resetsAt };
+      if (JSON.stringify(next) !== JSON.stringify(j.queued)) { j.queued = next; changed = true; }
+    }
+    if (changed) store.save(state);
+  }
+
+  // why: a stale id (job stopped or discarded while queued) is picked so next() drops it, then skipped.
+  const admissible = (id) => {
+    const j = state.jobs.find((x) => x.id === id);
+    if (j?.status !== 'queued') return true;
+    return !j.queued?.holder && check(j.stage, j.id).ok;
+  };
+
+  function drain() {
+    for (let id; (id = qm.next(admissible));) {
+      const j = state.jobs.find((x) => x.id === id);
+      if (j?.status === 'queued') begin(j);
+    }
+    refresh();
+  }
+
+  function begin(j) {
+    const card = cardOf(j.cardId);
+    const resume = j.queued?.resume;
+    delete j.queued;
+    delete j.limitHit;
+    if (j.stage === 'run') {
+      j.status = 'running';
+      store.save(state);
+      return resume ? beginResume(j, card) : restart(j, card);
+    }
+    j.status = 'starting';
+    store.save(state);
+    launch({ store, state, job: j, card, worktree: j.worktree, mode: j.sessionId ? 'resume' : 'start' }).catch(() => {});
+  }
+
+  async function beginResume(j, card) {
+    const r = await resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv }).catch((e) => ({ ok: false, text: e.message }));
+    if (!r.ok) return runFailed(j, r.text);
+    resumed(j, card);
+  }
 
   const job = (id) => state.jobs.find((j) => j.id === id) ?? (() => { throw fail(404, `unknown job: ${id}`); })();
   const wait = (j, extra) => { Object.assign(j, { status: 'waiting' }, extra); store.save(state); };
@@ -127,12 +238,14 @@ export function createApp({
     sessions.set(j.id, p);
     p.then((sess) => sess.done).then(({ reason }) => {
       for (const [id, a] of pending) if (a.jobId === j.id) pending.delete(id);
+      if (sessions.get(j.id) !== p || j.limitHit) return drain();
       if (!FINAL.has(j.status)) {
         j.status = { stopped: 'stopped', refused: 'refused' }[reason] ?? 'crashed';
         if (j.status === 'crashed') j.crashReason = reason ?? 'exited';
         if (reason === 'init-mismatch') j.outcome = 'invariant';
         store.save(state);
       }
+      drain();
     }, (e) => { j.status = 'crashed'; j.crashReason = e.message; store.save(state); });
     return p;
   }
@@ -180,13 +293,16 @@ export function createApp({
 
   function queue({ j, card, cwd, text }) {
     const holder = holderOf(cwd);
-    Object.assign(j, { status: 'queued', queued: { text, holder: holder && { id: holder.id, phase: holder.phase, pid: holder.pid } } });
+    Object.assign(j, { status: 'queued', queued: { reason: 'lock', text, holder: holder && { id: holder.id, phase: holder.phase, pid: holder.pid } } });
+    qm.enqueue(j.id);
     store.save(state);
     const timer = setInterval(() => {
       if (holderOf(cwd)) return;
       clearInterval(timer);
       timers.delete(j.id);
-      restart(j, card);
+      delete j.queued?.holder;
+      store.save(state);
+      drain();
     }, loadStages().stages.run.pollMs);
     timer.unref();
     timers.set(j.id, timer);
@@ -200,6 +316,8 @@ export function createApp({
   const rerun = new Set();
   const busyRun = new Set();
   let closed = false;
+  let hardStop;
+  let drainTimer;
 
   function runDirOf(j) {
     if (!RUN_ID.test(j.run?.id ?? '')) throw new Error('bad run id');
@@ -428,6 +546,8 @@ export function createApp({
       const j = addJob(state, { cardId: id, stage: 'spec' });
       Object.assign(j, { worktree: wt.path, startedAt: Date.now() });
       store.save(state);
+      const v = check('spec', j.id);
+      if (!v.ok) return holdBack(j, v);
       await launch({ store, state, job: j, card, worktree: wt.path, mode: 'start' });
       return j;
     },
@@ -442,6 +562,8 @@ export function createApp({
       const j = addJob(state, { cardId: id, stage: 'find-cause' });
       Object.assign(j, { worktree: from.worktree, startedAt: Date.now() });
       store.save(state);
+      const v = check('find-cause', j.id);
+      if (!v.ok) return holdBack(j, v);
       await launch({ store, state, job: j, card, worktree: from.worktree, mode: 'start' });
       return j;
     },
@@ -463,7 +585,10 @@ export function createApp({
         delete card.collision;
         delete shaped.needsYou;
         const j = addJob(state, { cardId: id, stage: 'run' });
-        Object.assign(j, { status: 'running', worktree: shaped.worktree, brief: shaped.brief, startedAt: Date.now() });
+        const v = check('run', j.id);
+        Object.assign(j, { worktree: shaped.worktree, brief: shaped.brief, startedAt: Date.now() });
+        if (!v.ok) return holdBack(j, v);
+        j.status = 'running';
         store.save(state);
         return await startFor(j, card);
       } finally { approving.delete(id); }
@@ -479,12 +604,21 @@ export function createApp({
     async retry({ id }) {
       const j = job(id);
       if (j.stage !== 'run' || !['refusal', 'setup', 'run-failed'].includes(j.needsYou?.kind) || approving.has(id)) throw fail(409, 'job has nothing to retry');
+      const v = check('run', id);
+      if (!v.ok) { delete j.needsYou; return holdBack(j, v); }
       approving.add(id);
       try { return await startFor(Object.assign(j, { status: 'running' }), cardOf(j.cardId)); } finally { approving.delete(id); }
     },
     approveGate: ({ id }) => again(id, ['gate', 'conflict'], (j) => approveRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
     resumeRunRoute({ id }) {
-      if (job(id).initMismatches?.length) throw fail(409, 'a run stopped by the init check is never resumed');
+      const j = job(id);
+      if (j.initMismatches?.length) throw fail(409, 'a run stopped by the init check is never resumed');
+      const v = check('run', id);
+      if (!v.ok) {
+        needs(j, 'run-failed');
+        delete j.needsYou;
+        return holdBack(j, v, { resume: true });
+      }
       return again(id, ['run-failed'], (j) => resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv }));
     },
     rejectGate({ id }) {
@@ -563,6 +697,34 @@ export function createApp({
       return { ok: true };
     },
     transcript: ({ id }) => baseStore.readEvents(job(id).id),
+    getSettings: () => settingsNow(),
+    putSettings({ body }) {
+      if (body && 'overageAllowed' in body) throw fail(400, 'overageAllowed is not set here');
+      const r = saveSettings(dataDir, body);
+      if (r.error) throw fail(400, r.error);
+      drain();
+      return settingsNow();
+    },
+    getQueue: () => qm.snapshot(),
+    reorderQueue({ body }) {
+      const r = qm.reorder(body.ids);
+      if (r.error) throw fail(400, r.error);
+      store.save(state);
+      return qm.snapshot();
+    },
+    prioritize({ body }) {
+      if (!Array.isArray(body.ids) || !body.ids.every((x) => typeof x === 'string')) throw fail(400, 'ids must be a list of project ids');
+      qm.setPriority(body.ids);
+      store.save(state);
+      return qm.snapshot();
+    },
+    resumeQueue() {
+      qm.resume('stopped');
+      qm.resume('limit');
+      store.save(state);
+      drain();
+      return qm.snapshot();
+    },
   };
 
   server = createServer({ routes: routeTable(handlers), token, distDir });
@@ -579,12 +741,20 @@ export function createApp({
       }
       for (const j of state.jobs) {
         if (j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot) { attach(j); onRun(j); }
-        if (j.stage === 'run' && j.status === 'queued') restart(j, cardOf(j.cardId));
+        if (j.status === 'queued') { delete j.queued?.holder; qm.enqueue(j.id); }
       }
+      limiter.restore();
+      hardStop = watchHardStop({ getUsage: usageNow, settings: settingsNow, runs: liveRuns });
+      drainTimer = setInterval(drain, drainMs);
+      drainTimer.unref();
+      drain();
       return { port: actual, url, reconciled: auth.ok };
     },
     async close() {
       closed = true;
+      clearInterval(drainTimer);
+      hardStop?.stop();
+      for (const t of limitTimers) clearTimeout(t);
       for (const t of timers.values()) clearInterval(t);
       for (const w of watchers.values()) w.stop();
       await supervisor.stopAll();
