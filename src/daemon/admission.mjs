@@ -5,10 +5,10 @@ const EPSILON = 1e-9;
 const no = (reason, rateLimitType = null, resetsAt = null) => ({ ok: false, reason, rateLimitType, resetsAt });
 
 // why: overage is active on isUsingOverage or any overageStatus other than rejected (Decision 7).
-const overageActive = (o) => Boolean(o) && (o.isUsingOverage === true || (o.status != null && o.status !== 'rejected'));
+export const overageActive = (o) => Boolean(o) && (o.isUsingOverage === true || (o.status != null && o.status !== 'rejected'));
 
 // why: a limit pause holds only stages that name its window (Decision 9); any other cause holds all.
-const holds = (paused, windows) => paused && (paused.reason !== 'limit' || !paused.rateLimitType || windows.includes(paused.rateLimitType));
+export const holds = (paused, windows) => paused && (paused.reason !== 'limit' || !paused.rateLimitType || windows.includes(paused.rateLimitType));
 
 const count = (running) => (Array.isArray(running) ? running.length : Number(running) || 0);
 
@@ -25,8 +25,10 @@ function overCeiling({ windows, usage, settings, delta }) {
 
 export function admit({ stage, usage, settings, history, running, queue }) {
   const windows = stageWindows(stage);
-  const paused = queue?.paused;
-  if (holds(paused, windows)) return no('paused', paused.rateLimitType ?? null, paused.resetsAt ?? null);
+  // why: every pause counts, not only the first (Decisions 9, 14, 15); a limit pause is scoped to its window, the rest hold all.
+  const pauses = queue?.pauses?.length ? queue.pauses : queue?.paused ? [queue.paused] : [];
+  const paused = pauses.find((p) => holds(p, windows));
+  if (paused) return no('paused', paused.rateLimitType ?? null, paused.resetsAt ?? null);
   if (overageActive(usage?.overage) && !settings.overageAllowed) return no('overage', null, usage.overage.resetsAt ?? null);
   if (count(running) >= settings.maxConcurrent) return no('concurrency');
   return overCeiling({ windows, usage, settings, delta: p75(history, stage, seedP75(stage)) }) ?? { ok: true };

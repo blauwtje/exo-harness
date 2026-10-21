@@ -8,6 +8,7 @@ import { shortId } from './derive.js';
 const KIND_WORD = {
   permission: 'Permission', question: 'Question', invariant: 'Invariant', 'turn-cap': 'Turn cap', failure: 'Failure', health: 'Health',
   brief: 'Brief', gate: 'Gate', conflict: 'Conflict', 'run-failed': 'Run failed', setup: 'Setup', refusal: 'Refused', land: 'Land',
+  limit: 'Limit', budget: 'Budget', overage: 'Overage',
 };
 
 const pathTail = (p) => String(p ?? '').split('/').slice(-3).join('/');
@@ -28,7 +29,7 @@ function GateBody({ item, deck, open }) {
   const conflict = item.kind === 'conflict';
   return (
     <>
-      <p className="said">{conflict ? 'The run cannot rebase onto its base. Find the cause, or rebase by hand, then approve.' : 'The run parked at a gate. Review the change, then approve or reject.'}</p>
+      <p className="said">{conflict ? 'The run cannot rebase onto its base. Find the cause, or rebase by hand, then approve.' : item.kind === 'limit' ? 'The run parked on a usage limit. Approve to continue it, or reject.' : 'The run parked at a gate. Review the change, then approve or reject.'}</p>
       <dl className="kv">
         <dt>Branch</dt><dd>{item.job.run?.branch ?? '—'}</dd>
         <dt>Base</dt><dd>{n.base ?? '—'}</dd>
@@ -103,6 +104,28 @@ function BriefBody({ item, deck, open }) {
         <button className="btn btn-signal" onClick={() => deck.act((api) => api.approve(item.card.id))}>Approve</button>
         <button className="btn btn-bad" onClick={() => deck.act((api) => api.reject(item.card.id))}>Reject</button>
         <button className="btn btn-quiet" onClick={open}>Open job</button>
+      </div>
+    </>
+  );
+}
+
+// why: Decisions 7 and 12; a budget raise waits for Approve or Reject, and overage is lifted only by its own Allow.
+function NeedBody({ item, deck }) {
+  const n = item.need;
+  if (n.kind === 'overage') {
+    return (
+      <>
+        <p className="said">Overage is active, so no new job starts and running jobs drain. Allow it for this session, or wait for the window to reset.</p>
+        <div className="actions"><button className="btn btn-signal" onClick={() => deck.act((api) => api.allowOverage())}>Allow</button></div>
+      </>
+    );
+  }
+  return (
+    <>
+      <p className="said">{n.change?.ceilings ? `New ceilings: ${Object.entries(n.change.ceilings).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', ')}` : `Budget for ${n.change?.projectKey}: ${n.change?.dial}`}</p>
+      <div className="actions">
+        <button className="btn btn-signal" onClick={() => deck.act((api) => api.approveNeed(n.id))}>Approve</button>
+        <button className="btn btn-bad" onClick={() => deck.act((api) => api.rejectNeed(n.id))}>Reject</button>
       </div>
     </>
   );
@@ -184,7 +207,8 @@ function Body({ item, deck, open }) {
   const stop = () => deck.act((api) => api.stop(item.job.id));
   if (item.kind === 'question') return <QuestionBody item={item} deck={deck} open={open} />;
   if (item.kind === 'brief') return <BriefBody item={item} deck={deck} open={open} />;
-  if (item.kind === 'gate' || item.kind === 'conflict') return <GateBody item={item} deck={deck} open={open} />;
+  if (item.need) return <NeedBody item={item} deck={deck} />;
+  if (['gate', 'conflict', 'limit'].includes(item.kind)) return <GateBody item={item} deck={deck} open={open} />;
   if (['run-failed', 'setup', 'refusal', 'land'].includes(item.kind)) return <RunBody item={item} deck={deck} open={open} />;
   if (item.kind === 'permission') {
     const { tool_name: tool, input = {} } = item.ask.request;
@@ -240,7 +264,7 @@ function Body({ item, deck, open }) {
   );
 }
 
-const titleOf = (item) => (item.kind === 'health' ? `${item.name} check failed` : item.card?.title ?? 'Unknown card');
+const titleOf = (item) => (item.kind === 'health' ? `${item.name} check failed` : item.need ? item.need.title ?? 'Overage is active' : item.card?.title ?? 'Unknown card');
 
 export default function NeedsYou({ items, deck, openJob }) {
   const view = useRef(null);

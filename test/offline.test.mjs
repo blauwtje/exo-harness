@@ -14,7 +14,9 @@ const flaky = (failures) => {
 
 test('F-4-14 the queue holds while the probe fails and resumes on the first success', async () => {
   const q = createQueue({ projects: [], jobs: [], cards: [] });
-  const probe = createOfflineProbe({ fetch: flaky(2), queue: q, intervalMs: 10, setTimer: () => {} });
+  const probe = createOfflineProbe({ fetch: flaky(3), queue: q, intervalMs: 10, setTimer: () => {} });
+  await probe.check();
+  assert.equal(q.snapshot().paused, null);
   await probe.check();
   assert.equal(q.snapshot().paused.reason, 'offline');
   q.enqueue('j1');
@@ -30,7 +32,8 @@ test('S-08 offline, queued jobs start only after the success and the deck state 
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'exo-offline-')));
   const data = join(base, 'data');
   mkdirSync(data);
-  writeFileSync(join(data, 'state.json'), JSON.stringify({ projects: [], cards: [{ id: 'c1', projectKey: 'p', title: 'T', lane: 'Shaped' }], jobs: [{ id: 'j1', cardId: 'c1', stage: 'spec', status: 'queued' }] }));
+  // why: the pause from an earlier failed pair is read back, as after a restart, so the first drain starts nothing.
+  writeFileSync(join(data, 'state.json'), JSON.stringify({ projects: [], cards: [{ id: 'c1', projectKey: 'p', title: 'T', lane: 'Shaped' }], jobs: [{ id: 'j1', cardId: 'c1', stage: 'spec', status: 'queued' }] , queue: { pauses: [{ reason: 'offline' }] } }));
   const timers = [];
   const app = createApp({
     dataDir: data, pluginRoot: base, drainMs: 3600000,

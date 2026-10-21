@@ -22,10 +22,10 @@ export function groupCards(state, projectKey) {
 
 const RANK = {
   invariant: 0, health: 1, failure: 2, 'run-failed': 3, refusal: 4, setup: 5, land: 6, conflict: 7, gate: 8,
-  permission: 9, question: 10, brief: 11, 'turn-cap': 12,
+  permission: 9, question: 10, brief: 11, 'turn-cap': 12, limit: 8, overage: 2, budget: 13,
 };
 // why: Decision 18; the daemon deletes needsYou once a run kind is answered, so a job carrying one still waits, latest or not.
-export const RUN_KINDS = new Set(['brief', 'gate', 'conflict', 'run-failed', 'setup', 'refusal', 'land']);
+export const RUN_KINDS = new Set(['brief', 'gate', 'conflict', 'run-failed', 'setup', 'refusal', 'land', 'limit']);
 
 export function needsYou(state, health) {
   const items = [];
@@ -48,6 +48,8 @@ export function needsYou(state, health) {
     } else if (job.outcome === 'invariant') items.push({ kind: 'invariant', key: `inv:${job.id}`, job, card });
     else if (job.status === 'crashed') items.push({ kind: 'failure', key: `fail:${job.id}`, job, card });
   }
+  // why: Decisions 7 and 12; budget raises and the overage item live in state.needs, not on a job.
+  for (const need of state.needs ?? []) items.push({ kind: need.kind, key: `need:${need.id}`, need });
   for (const [name, check] of Object.entries(health ?? {})) {
     if (check && check.ok === false) items.push({ kind: 'health', key: `health:${name}`, name, check });
   }

@@ -2,8 +2,9 @@ import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import { admit } from './admission.mjs';
+import { admit, overageActive } from './admission.mjs';
 import { checkAuth } from './auth.mjs';
 import { watchHardStop } from './hard-stop.mjs';
 import { checkHealth } from './health.mjs';
@@ -24,7 +25,9 @@ import { failureInbox } from './outcomes.mjs';
 import { createServer } from './server.mjs';
 import { isDone } from './shape-guard.mjs';
 import { createStore } from './store.mjs';
-import { loadStages } from './stages.mjs';
+import { loadStages, stageWindows } from './stages.mjs';
+import { ledgerRow, recordUtilization } from './ledger.mjs';
+import { runStopCard } from './retry.mjs';
 import { createSupervisor } from './supervisor.mjs';
 import { FINAL_STATUSES as FINAL, parseRateLimitEvent } from './usage.mjs';
 import { mergeUsage, readIterLogUsage, readStatuslineCache, usageFromEvent } from './usage-sources.mjs';
@@ -39,10 +42,11 @@ const currentDial = (project) => {
 // why: an unknown current value counts as a raise, so the gate errs toward asking.
 const isRaise = (from, to) => !DIAL.includes(from) || DIAL.indexOf(to) > DIAL.indexOf(from);
 
-// why: the same rule admission applies (Decision 7), kept here because admission.mjs only exports `admit`.
-const overageActive = (o) => Boolean(o) && (o.isUsingOverage === true || (o.status != null && o.status !== 'rejected'));
-
 const fail = (status, message) => Object.assign(new Error(message), { status });
+const checked = (r) => {
+  if (r.error) { throw fail(400, r.error); }
+  return r;
+};
 const text = (v, name) => {
   if (typeof v !== 'string' || !v.trim()) throw fail(400, `${name} is required`);
   return v;
@@ -158,18 +162,43 @@ export function createApp({
     if (parsed) syncOverage();
     const hit = detectLimit(event);
     if (hit) limitHit(jobId, hit);
+    if (event?.type === 'result') recordResult(jobId, event, at);
+  }
+
+  // why: Decisions 6 and 13; each result adds a ledger row, and a finished job adds one utilization sample (the window's rise from its start to its last result) to the history p75 reads.
+  const startUtil = new Map();
+  const lastUtil = new Map();
+  const stageUtil = (stage) => usageNow()[stageWindows(stage)[0]]?.utilization;
+  function recordResult(jobId, event, at) {
+    const j = state.jobs.find((x) => x.id === jobId);
+    if (!j) return;
+    const row = ledgerRow(event, j.ledger?.at(-1), at);
+    if (row) (j.ledger ??= []).push(row);
+    const to = stageUtil(j.stage);
+    if (typeof to === 'number') lastUtil.set(j.id, to);
+    store.save(state);
+  }
+  // why: a limit-hit job is unfinished and restarts later, so its partial rise is no sample of a whole job.
+  function sampleJob(j) {
+    const from = startUtil.get(j.id);
+    const to = lastUtil.get(j.id);
+    startUtil.delete(j.id);
+    lastUtil.delete(j.id);
+    if (j.limitHit || typeof from !== 'number' || typeof to !== 'number') return;
+    state.utilizationHistory = recordUtilization(state.utilizationHistory, j.stage, to - from);
+    store.save(state);
   }
 
   const limitTimers = new Set();
   const limiter = createLimitTimer({
-    queue: { ...qm, resume: (reason) => { qm.resume(reason); store.save(state); drain(); } },
+    queue: { ...qm, resume: (reason, type) => { qm.resume(reason, type); store.save(state); drain(); } },
     setTimer: (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); limitTimers.add(t); return t; },
     ...limitOptions,
   });
 
   const offlineTimers = new Set();
   const offlineProbe = createOfflineProbe({
-    queue: { ...qm, resume: (reason) => { qm.resume(reason); store.save(state); drain(); }, pause: (cause) => { qm.pause(cause); store.save(state); } },
+    queue: { ...qm, resume: (reason, type) => { qm.resume(reason, type); store.save(state); drain(); }, pause: (cause) => { qm.pause(cause); store.save(state); } },
     setTimer: (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); offlineTimers.add(t); return t; },
     ...offlineOptions,
   });
@@ -271,14 +300,18 @@ export function createApp({
 
   function launch(opts) {
     const { job: j } = opts;
+    // why: every -p start passes here (begin, shape, find-cause, reconcile), so the job's utilization sample starts from this reading.
+    startUtil.set(j.id, stageUtil(j.stage));
+    lastUtil.delete(j.id);
     const p = supervisor.start({ claudePath, parentEnv, pluginRoot, ...opts, ...sessionOpts(j, opts.card) });
     sessions.set(j.id, p);
     p.then((sess) => sess.done).then(({ reason }) => {
       for (const [id, a] of pending) if (a.jobId === j.id) pending.delete(id);
+      if (sessions.get(j.id) === p) sampleJob(j);
       if (sessions.get(j.id) !== p || j.limitHit) return drain();
       if (!FINAL.has(j.status)) {
         j.status = { stopped: 'stopped', refused: 'refused' }[reason] ?? 'crashed';
-        if (j.status === 'crashed') j.crashReason = reason ?? 'exited';
+        if (j.status === 'crashed') j.crashReason = j.bugCard?.title ?? reason ?? 'exited';
         if (reason === 'init-mismatch') j.outcome = 'invariant';
         store.save(state);
       }
@@ -477,7 +510,11 @@ export function createApp({
       return store.save(state);
     }
     if (run.phase === 'refused' && String(run.reason).startsWith('could not fast-forward')) return ffRefused(j, project);
-    runFailed(j, run.reason ?? `run ${run.phase}`);
+    // why: Decision 10; the deck never retries an exo run, a no-progress or attempt-cap stop shows its report.md Reason: as the card.
+    const report = run.phase === 'stopped' ? await Promise.resolve().then(() => readFile(join(runDirOf(j), 'report.md'), 'utf8')).catch(() => '') : '';
+    const stop = runStopCard(report);
+    runFailed(j, stop?.reason ?? run.reason ?? `run ${run.phase}`);
+    if (stop) j.needsYou.title = stop.title;
   }
 
   const failCard = (j, e) => {
@@ -730,6 +767,8 @@ export function createApp({
       return j;
     },
     async stopAll() {
+      // why: Decision 15; Stop all holds the queue until Resume queue, so the drain loop does not restart what was just stopped.
+      qm.pause({ reason: 'stopped', since: Date.now() });
       await supervisor.stopAll();
       for (const j of state.jobs) if (!FINAL.has(j.status) && j.status !== 'queued') j.status = 'stopped';
       store.save(state);
@@ -747,8 +786,7 @@ export function createApp({
         const v = rest?.ceilings?.[k];
         if (typeof v === 'number' && v > 0 && v <= 1 && v > DEFAULTS.ceilings[k] && v > now[k]) { raised[k] = v; delete rest.ceilings[k]; }
       }
-      const r = saveSettings(dataDir, rest);
-      if (r.error) throw fail(400, r.error);
+      checked(saveSettings(dataDir, rest));
       if (Object.keys(raised).length) { addNeed({ kind: 'budget', title: 'Raise budget ceilings', change: { ceilings: raised } }); store.save(state); }
       drain();
       return settingsNow();
@@ -767,6 +805,8 @@ export function createApp({
       return { applied: true };
     },
     allowOverage() {
+      // why: Decision 7; only the Needs-you overage item's toggle lifts overage, so there is nothing to allow before one is active.
+      if (!overageActive(overage)) throw fail(409, 'no overage is active');
       overageOk = true;
       syncOverage();
       drain();
@@ -778,8 +818,7 @@ export function createApp({
       approving.add(id);
       try {
         if (n.change.ceilings) {
-          const r = saveSettings(dataDir, { ceilings: n.change.ceilings });
-          if (r.error) throw fail(400, r.error);
+          checked(saveSettings(dataDir, { ceilings: n.change.ceilings }));
         } else {
           const project = state.projects.find((p) => p.key === n.change.projectKey) ?? (() => { throw fail(404, 'unknown project'); })();
           const r = await setBudget({ project, value: n.change.dial, pluginRoot });
@@ -799,8 +838,7 @@ export function createApp({
     },
     getQueue: () => qm.snapshot(),
     reorderQueue({ body }) {
-      const r = qm.reorder(body.ids);
-      if (r.error) throw fail(400, r.error);
+      checked(qm.reorder(body.ids));
       store.save(state);
       return qm.snapshot();
     },

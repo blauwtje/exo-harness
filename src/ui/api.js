@@ -59,6 +59,8 @@ export function createApi(token) {
     setBudget: (projectKey, value) => call('POST', '/api/budget', { projectKey, value }),
     reorderQueue: (ids) => call('POST', '/api/queue/reorder', { ids }),
     resumeQueue: () => call('POST', '/api/queue/resume', {}),
+    approveNeed: (id) => call('POST', `/api/needs/${encodeURIComponent(id)}/approve`, {}),
+    rejectNeed: (id) => call('POST', `/api/needs/${encodeURIComponent(id)}/reject`, {}),
     allowOverage: () => call('POST', '/api/overage/allow', {}),
     events: () => new EventSource(`/events?token=${encodeURIComponent(token)}`),
   };
