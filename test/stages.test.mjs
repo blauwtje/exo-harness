@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadStages, buildArgs, userMessage } from '../src/daemon/stages.mjs';
+import { loadStages, buildArgs, userMessage, runArgs } from '../src/daemon/stages.mjs';
 
 const spec = loadStages().stages.spec;
 
@@ -52,4 +52,30 @@ test('buildArgs carries the flags and fills plugin-root', () => {
   assert.ok(!a.some((x) => x.includes('<plugin-root>')));
   assert.equal(a[a.indexOf('--append-system-prompt') + 1], spec.systemPrompt);
   assert.ok(buildArgs('spec', { sessionId: 'sid', pluginRoot: '/p' }, 'resume').includes('--resume'));
+});
+
+test('F-3-02 runArgs gives the Decision 7 argv from the run caps', () => {
+  const run = loadStages().stages.run;
+  assert.deepEqual(run, { maxRunUsd: 30, maxBudgetUsd: 10, pollMs: 1000 });
+  assert.deepEqual(runArgs({ pluginRoot: '/p', brief: '/b/plan.md' }, run), [
+    '/p/skills/build/scripts/exo-cli.mjs', 'run', '/b/plan.md', '--detach',
+    '--max-run-usd', '30', '--max-budget-usd', '10']);
+});
+
+test('F-3-10 stages.find-cause is read-only, sonnet, with the spec deny list', () => {
+  const fc = loadStages().stages['find-cause'];
+  assert.equal(fc.model, 'sonnet');
+  assert.deepEqual(fc.disallowedTools, spec.disallowedTools);
+  assert.deepEqual(fc.helperAllowlist, spec.helperAllowlist);
+  assert.equal(fc.allowedTools.length, spec.allowedTools.length);
+  assert.ok(fc.allowedTools.some((t) => t.includes('<plugin-root>/skills/find-cause/scripts/*')));
+  assert.ok(!fc.allowedTools.some((t) => t.includes('skills/spec/scripts')));
+  for (const t of fc.allowedTools) {
+    assert.doesNotMatch(t, /^(Write|Edit)/);
+    assert.doesNotMatch(t, /^Bash\((git|node)\s*\*?\)$/);
+  }
+  for (const d of ['Bash(git push *)', 'Bash(git commit *)', 'Bash(gh *)']) assert.ok(fc.disallowedTools.includes(d));
+  const a = buildArgs('find-cause', { sessionId: 's', pluginRoot: '/p' }, 'new');
+  assert.equal(a[a.indexOf('--model') + 1], 'sonnet');
+  assert.ok(a.includes('Bash(node /p/skills/find-cause/scripts/*)'));
 });

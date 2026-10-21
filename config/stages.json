@@ -52,13 +52,84 @@
         "Bash(flyctl deploy*)",
         "mcp__*"
       ],
-      "helperAllowlist": ["exo:find-open-points", "exo:locate-code", "exo:fetch-docs"],
+      "helperAllowlist": [
+        "exo:find-open-points",
+        "exo:locate-code",
+        "exo:fetch-docs"
+      ],
       "maxTurns": 60,
       "maxTotalTurns": 200,
       "maxBudgetUsd": 10,
       "stallMs": 600000,
       "systemPrompt": "This session is driven by a workflow (exo-harness): spec is invoked by a workflow, so at hand-off ask nothing and return to the caller; the harness queues the build itself so it stays inside the user's limits.",
       "userMessage": "/exo:spec {card}",
+      "resumeMessage": "This session was interrupted and has been resumed. The last tool call may not have finished: check its effect before you repeat any command that writes, then continue."
+    },
+    "run": {
+      "maxRunUsd": 30,
+      "maxBudgetUsd": 10,
+      "pollMs": 1000
+    },
+    "find-cause": {
+      "model": "sonnet",
+      "effort": "medium",
+      "permissionMode": "default",
+      "allowedTools": [
+        "Read",
+        "Glob",
+        "Grep",
+        "Bash(git status *)",
+        "Bash(git diff *)",
+        "Bash(git log *)",
+        "Bash(git show *)",
+        "Bash(git rev-parse *)",
+        "Bash(git ls-files *)",
+        "Bash(git grep *)",
+        "Bash(git branch --show-current)",
+        "Bash(git worktree list *)",
+        "Bash(git remote -v)",
+        "Bash(node <plugin-root>/skills/find-cause/scripts/*)",
+        "Bash(node \"<plugin-root>/skills/find-cause/scripts/*)",
+        "Bash(node <plugin-root>/skills/route-skills/scripts/next-stage.mjs *)",
+        "Bash(node \"<plugin-root>/skills/route-skills/scripts/next-stage.mjs\" *)"
+      ],
+      "disallowedTools": [
+        "Bash(git push *)",
+        "Bash(gh *)",
+        "Bash(git reset *)",
+        "Bash(git rebase *)",
+        "Bash(git cherry-pick *)",
+        "Bash(git merge *)",
+        "Bash(git tag *)",
+        "Bash(git switch *)",
+        "Bash(git checkout *)",
+        "Bash(git branch -D *)",
+        "Bash(git commit *)",
+        "Bash(git stash *)",
+        "Bash(git clean *)",
+        "Bash(git restore *)",
+        "Bash(node *settings.mjs*)",
+        "Bash(node *memory.mjs*)",
+        "Bash(npm publish*)",
+        "Bash(npm *publish*)",
+        "Bash(vercel*)",
+        "Bash(npx vercel*)",
+        "Bash(netlify deploy*)",
+        "Bash(fly deploy*)",
+        "Bash(flyctl deploy*)",
+        "mcp__*"
+      ],
+      "helperAllowlist": [
+        "exo:find-open-points",
+        "exo:locate-code",
+        "exo:fetch-docs"
+      ],
+      "maxTurns": 60,
+      "maxTotalTurns": 200,
+      "maxBudgetUsd": 10,
+      "stallMs": 600000,
+      "systemPrompt": "This session is driven by a workflow (exo-harness): find-cause is invoked by a workflow, so make no commit or push and never start a build; write only under docs/, and at hand-off ask nothing, return a short summary of the cause to the caller.",
+      "userMessage": "/exo:find-cause {card}",
       "resumeMessage": "This session was interrupted and has been resumed. The last tool call may not have finished: check its effect before you repeat any command that writes, then continue."
     }
   }
