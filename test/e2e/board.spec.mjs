@@ -217,6 +217,15 @@ test.describe('token', () => {
     expect(page.url()).not.toContain(t.token);
   });
 
+  test('F-2-01 is read from the ?token= URL form', async ({ page }) => {
+    t = await boot();
+    await withCards(t, ['Visible']);
+    const res = await page.goto(t.queryUrl);
+    expect(res.url()).toContain('?token=');
+    expect(res.url()).not.toContain('#token=');
+    await expect(lane(page, 'Inbox')).toContainText('Visible');
+  });
+
   test('a wrong token shows an error state', async ({ page }) => {
     t = await boot();
     await page.goto(`http://127.0.0.1:${t.port}/#token=${'x'.repeat(40)}`);

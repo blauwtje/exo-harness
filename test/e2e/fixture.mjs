@@ -101,7 +101,7 @@ export async function boot({ steps = [], init, initFor, seed, claudeMissing = fa
   return {
     app, api, token, dir, port,
     deckUrl: `http://127.0.0.1:${port}/#token=${token}`,
-    queryUrl: url,
+    queryUrl: `http://127.0.0.1:${port}/?token=${token}`,
     close: () => app.close(),
   };
 }
