@@ -1,0 +1,83 @@
+:root {
+  --paper: #0C1011; --ink: #ECE6DC; --amber: #F4B03E;
+
+  --stage-inbox: #6F7B7D;    --stage-inbox-ink: #A7B1B2;    --stage-inbox-tint: #1A2123;
+  --stage-planned: #8B85B8;  --stage-planned-ink: #BCB6E0;  --stage-planned-tint: #1E1D2B;
+  --stage-approved: #7591B0; --stage-approved-ink: #A9C0D9; --stage-approved-tint: #172129;
+  --stage-queued: #7B8C94;   --stage-queued-ink: #AEBCC2;   --stage-queued-tint: #192226;
+  --stage-running: #3FB3A6;  --stage-running-ink: #74D2C5;  --stage-running-tint: #10282A; --stage-running-edge: #3FB3A6;
+  --stage-review: #AD8AA4;   --stage-review-ink: #D4B4CB;   --stage-review-tint: #261C24;
+  --stage-done: #6DB887;     --stage-done-ink: #93D3A9;     --stage-done-tint: #13251B;
+  --track: 6px;
+
+  --ground: var(--paper); --sheet: #131A1B; --card: #1C2426; --raised: #263032;
+  --line: #273032; --control: #717E80; --white: #F6F1E8;
+  --muted: #9BA4A4;
+  --on-fill: #0C1011;
+
+  --side: #252E30; --side-ink: var(--ink); --side-muted: #B0B8B8;
+  --side-hover: rgba(236, 230, 220, 0.06); --side-active: rgba(236, 230, 220, 0.12);
+  --side-line: rgba(236, 230, 220, 0.12); --side-focus: var(--ink);
+
+  --accent: #D9DFDD; --accent-hover: #F4F6F5; --accent-tint: #233033; --accent-ink: #0C1011;
+
+  --need: var(--amber); --need-tint: #2C2313; --need-ink: #F6C46A;
+  --run: var(--stage-running-ink); --run-tint: var(--stage-running-tint);
+  --done: var(--stage-done-ink); --done-tint: var(--stage-done-tint); --done-on-side: var(--stage-done-ink);
+  --fail: #EF8F98; --fail-tint: #2D181B; --fail-on-side: #F4AAB0;
+  --queued: var(--muted); --stopped: var(--muted);
+  --meter-calm: var(--stage-running); --meter-warm: #B89A6A; --meter-over: var(--amber);
+
+  --chip-1-bg: #1E2630; --chip-1-ink: #B6C3D3;
+  --chip-2-bg: #2A1F27; --chip-2-ink: #D8B6CC;
+  --chip-3-bg: #29241A; --chip-3-ink: #D9C8A4;
+  --chip-4-bg: #1B2720; --chip-4-ink: #B2D0BC;
+  --chip-5-bg: #1A2530; --chip-5-ink: #AAC6DD;
+  --chip-6-bg: #2B211C; --chip-6-ink: #DCB9A7;
+
+  --scrim: rgba(4, 6, 7, 0.68);
+
+  --display: 'Overpass Variable', system-ui, sans-serif;
+  --ui: 'Overpass Variable', system-ui, sans-serif;
+  --mono: 'Overpass Mono Variable', ui-monospace, monospace;
+  --fs-small: 14px; --fs-body: 16px; --fs-section: 20px; --fs-title: 28px;
+  --lh-small: 20px; --lh-body: 24px; --lh-section: 28px; --lh-title: 34px;
+  --fs-xs: var(--fs-small); --lh-xs: var(--lh-small); --fs-kpi: var(--fs-title); --lh-kpi: var(--lh-title);
+  --fw: 400; --fw-medium: 500; --fw-strong: 600; --fw-display: 700; --fw-turn: 700;
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --gap: 16px; --pad: 24px; --inset: 8px; --crew: 352px; --needs: 336px;
+
+  --side-w: 248px; --side-w-icon: 72px; --top-h: 64px;
+
+  --r-sheet: 20px; --r-card: 16px; --r-control: 12px; --r-s: 12px; --r-m: 12px; --r-pill: 999px; --r-button: var(--r-pill);
+  --control-h: 40px; --target-min: 24px;
+
+  --shadow-card: 0 1px 0 rgba(236, 230, 220, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-float: 0 0 0 1px rgba(236, 230, 220, 0.06), 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-up: 0 -6px 18px rgba(0, 0, 0, 0.4);
+  --glow-wait: 0 0 0 3px var(--amber), 0 0 16px 2px rgba(244, 176, 62, 0.38);
+  --glow-wait-soft: 0 0 0 3px var(--amber), 0 0 6px 0 rgba(244, 176, 62, 0.22);
+
+  --focus: 2px solid var(--accent);
+  --focus-offset: 2px;
+  --focus-halo: 0 0 0 2px var(--sheet);
+
+  --dur-fast: 140ms; --dur-base: 220ms; --dur-slow: 320ms; --dur-press: 90ms; --dur-release: 360ms; --dur-car: 560ms; --dur-glow: 2.4s;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --squish: 0.94; --squish-soft: 0.97;
+
+  --frame: var(--ground); --surface: var(--card); --border: var(--line); --rule: var(--line);
+  --text: var(--ink); --faint: var(--muted); --positive: var(--done);
+  --negative: var(--fail); --negative-ink: var(--fail); --warning: var(--need-ink);
+  --turn: var(--need); --turn-tint: var(--need-tint); --turn-ink: var(--need-ink); --wait: var(--need-ink);
+  --pill-positive-bg: var(--done-tint); --pill-positive-ink: var(--done);
+  --pill-negative-bg: var(--fail-tint); --pill-negative-ink: var(--fail);
+  --pill-warning-bg: var(--need-tint); --pill-warning-ink: var(--need-ink);
+  --pill-neutral-bg: var(--raised); --pill-neutral-ink: var(--ink);
+  --primary-bg: var(--accent); --primary-ink: var(--accent-ink); --primary-hover: var(--accent-hover);
+  --ease: var(--ease-out); --dur-1: var(--dur-fast); --dur-2: var(--dur-base); --dur-3: var(--dur-slow);
+  --rail: var(--side-w);
+  color-scheme: dark;
+}

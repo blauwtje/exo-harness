@@ -8,7 +8,7 @@ import { boot, stateOf, withCards } from './fixture.mjs';
 let t;
 test.afterEach(async () => { await t?.close(); t = null; });
 
-const lane = (page, name) => page.getByRole('region', { name: new RegExp(`^${name}, \\d+ cards?$`) });
+const lane = (page, name) => page.getByRole('region', { name: new RegExp(`^${name}, \\d+ tasks?$`) });
 const needs = (page) => page.getByRole('region', { name: 'Needs you' });
 const item = (page, kind) => needs(page).locator(`li[data-kind="${kind}"]`);
 const tmp = (p) => realpathSync(mkdtempSync(join(tmpdir(), p)));
@@ -24,12 +24,12 @@ function counter() {
   };
 }
 
-test('C-04 card to landed takes at most 3 clicks plus approvals', async ({ page }) => {
+test('C-04 task to landed takes at most 3 clicks plus approvals', async ({ page }) => {
   t = await boot({ steps: ['brief'] });
   const { cards } = await withCards(t, ['Greet']);
   const c = counter();
   await page.goto(t.deckUrl);
-  await c.click(lane(page, 'Inbox').getByRole('button', { name: 'Shape', exact: true }));
+  await c.click(lane(page, 'Inbox').getByRole('button', { name: 'Plan', exact: true }));
   const brief = item(page, 'brief');
   await expect(brief).toContainText('Greet');
   await c.approve(brief.getByRole('button', { name: 'Approve' }));
@@ -41,7 +41,7 @@ test('C-04 card to landed takes at most 3 clicks plus approvals', async ({ page 
   expect(s.jobs.find((j) => j.stage === 'run').status).toBe('done');
 });
 
-// why: a main checkout on main plus a linked worktree on feat-x with one changed file, as Shape leaves them.
+// why: a main checkout on main plus a linked worktree on feat-x with one changed file, as Plan leaves them.
 function shapedRepo() {
   const main = tmp('deck-run-main-');
   const g = gitIn(main);
@@ -63,7 +63,7 @@ const parkedScenario = {
   denied: 'rm -rf /\n', report: '# Report\nline\n', approve: { phase: 'landed' },
 };
 
-test('S-05 a parked run is a gate card with diff stat, per-file diff, report head and denied, and Approve lands it', async ({ page }) => {
+test('S-05 a parked run is a gate task with diff stat, per-file diff, report head and denied, and Approve lands it', async ({ page }) => {
   const r = shapedRepo();
   t = await boot({
     scenario: parkedScenario,
@@ -78,6 +78,7 @@ test('S-05 a parked run is a gate card with diff stat, per-file diff, report hea
   await c.approve(item(page, 'brief').getByRole('button', { name: 'Approve' }));
   const gate = item(page, 'gate');
   await expect(gate).toContainText('review the diff', { timeout: 15_000 });
+  await c.click(gate.getByRole('button', { name: 'Show the change' }));
   await expect(gate).toContainText('feat-x');
   await expect(gate.getByLabel('Diff stat')).toContainText('a.txt');
   await expect(gate.getByLabel('Report head')).toContainText('# Report');

@@ -15,22 +15,23 @@ const defaultJitter = () => 5000 + Math.floor(Math.random() * 55001);
 
 export function createLimitTimer({ queue, now = Date.now, setTimer = setTimeout, jitterMs = defaultJitter }) {
   const timerGenerationByWindow = new Map();
-  function schedule(type, resetsAt) {
-    const mine = (timerGenerationByWindow.get(type) ?? 0) + 1;
-    timerGenerationByWindow.set(type, mine);
+  function schedule(type, resetsAt, account = 'default') {
+    const key = `${account}|${type}`;
+    const mine = (timerGenerationByWindow.get(key) ?? 0) + 1;
+    timerGenerationByWindow.set(key, mine);
     if (typeof resetsAt !== 'number') return;
     const delay = Math.max(0, resetsAt * 1000 + jitterMs() - now());
     setTimer(() => {
-      if (mine === timerGenerationByWindow.get(type)) queue.resume('limit', type);
+      if (mine === timerGenerationByWindow.get(key)) queue.resume('limit', type, account);
     }, delay);
   }
   return {
-    hit({ rateLimitType = null, resetsAt = null }) {
-      queue.pause({ reason: 'limit', rateLimitType, resetsAt });
-      schedule(rateLimitType, resetsAt);
+    hit({ rateLimitType = null, resetsAt = null, account = 'default' }) {
+      queue.pause({ reason: 'limit', rateLimitType, resetsAt, ...(account === 'default' ? {} : { account }) });
+      schedule(rateLimitType, resetsAt, account);
     },
     restore() {
-      for (const p of queue.snapshot().pauses) if (p.reason === 'limit') schedule(p.rateLimitType ?? null, p.resetsAt);
+      for (const p of queue.snapshot().pauses) if (p.reason === 'limit') schedule(p.rateLimitType ?? null, p.resetsAt, p.account ?? 'default');
     },
   };
 }

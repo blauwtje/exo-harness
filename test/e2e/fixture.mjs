@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../../src/daemon/app.mjs';
+import { saveSettings } from '../../src/daemon/settings.mjs';
 
 const PLUGIN_ROOT = fileURLToPath(new URL('../fake-claude/plugin-root', import.meta.url));
 const tmp = (p) => realpathSync(mkdtempSync(join(tmpdir(), p)));
-export const DIST = fileURLToPath(new URL('../../dist', import.meta.url));
+export const DIST = process.env.EXO_E2E_DIST || fileURLToPath(new URL('../../dist', import.meta.url));
 
 export const USAGE = {
   total_cost_usd: 0.0421,
@@ -24,7 +25,11 @@ export function fakeClaude(dir, steps, { init = {}, initFor = {} } = {}) {
 const fs = require('node:fs');
 const rl = require('node:readline').createInterface({ input: process.stdin })[Symbol.asyncIterator]();
 const out = (o) => console.log(JSON.stringify(o));
-if (process.argv[2] === 'auth') { console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' })); process.exit(0); }
+if (process.argv[2] === 'auth') {
+  const own = process.env.CLAUDE_CONFIG_DIR && require('node:path').join(process.env.CLAUDE_CONFIG_DIR, 'fake-auth.json');
+  const reply = own && fs.existsSync(own) ? fs.readFileSync(own, 'utf8').trim() : process.env.FAKE_CLAUDE_AUTH || JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' });
+  console.log(reply); process.exit(0);
+}
 const next = async (type) => { for (;;) { const { value, done } = await rl.next(); if (done) process.exit(0); if (JSON.parse(value).type === type) return JSON.parse(value); } };
 const say = (t) => out({ type: 'assistant', message: { id: 'm' + Math.random(), model: 'claude-opus-4-8', content: [{ type: 'text', text: t }], usage: { input_tokens: 4, output_tokens: 90, cache_read_input_tokens: 7000, cache_creation_input_tokens: 3000, cache_creation: { ephemeral_1h_input_tokens: 2500, ephemeral_5m_input_tokens: 500 } } } });
 const USAGE = ${JSON.stringify(USAGE)};
@@ -80,16 +85,38 @@ export function repo(name = 'deck-repo-') {
   return dir;
 }
 
-export async function boot({ steps = [], init, initFor, seed, scenario = {}, claudeMissing = false } = {}) {
+export function accountsFixture(dir, dataDir, now = Date.now()) {
+  const s = (ms) => new Date(now + ms).toISOString();
+  const H = 3600_000;
+  const limit = (kind, group, percent, resetsIn, model) => ({ kind, group, percent, resets_at: s(resetsIn), scope: model ? { model: { id: null, display_name: model } } : null });
+  const claudeJson = (oauth, limits) => ({ oauthAccount: { billingType: 'stripe_subscription', ...oauth }, cachedUsageUtilization: { fetchedAtMs: now - 60_000, limits } });
+  const claudeJsonPath = join(dir, 'default-claude.json');
+  writeFileSync(claudeJsonPath, JSON.stringify(claudeJson(
+    { emailAddress: 'thomas@example.com', organizationType: 'claude_max', organizationRateLimitTier: 'default_claude_max_5x', subscriptionCreatedAt: '2025-03-09T10:00:00.000Z' },
+    [limit('session', 'session', 34, 2.25 * H), limit('weekly_all', 'weekly', 61, 76 * H), limit('weekly_scoped', 'weekly', 18, 76 * H, 'Fable')],
+  )));
+  const workDir = join(dir, 'accounts', 'work');
+  mkdirSync(workDir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(workDir, '.claude.json'), JSON.stringify(claudeJson(
+    { emailAddress: 'thomas@work.example', organizationType: 'claude_pro', organizationRateLimitTier: 'default_claude_pro', subscriptionCreatedAt: '2026-01-27T08:30:00.000Z' },
+    [limit('session', 'session', 7, 4 * H), limit('weekly_all', 'weekly', 22, 120 * H)],
+  )));
+  writeFileSync(join(workDir, 'fake-auth.json'), JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', email: 'thomas@work.example', subscriptionType: 'pro' }));
+  const saved = saveSettings(dataDir, { accounts: [{ id: 'work', name: 'Work', configDir: workDir }] });
+  if (saved.error) throw new Error(saved.error);
+  return { claudeJsonPath, env: { FAKE_CLAUDE_AUTH: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', email: 'thomas@example.com', subscriptionType: 'max' }) } };
+}
+
+export async function boot({ steps = [], init, initFor, seed, scenario = {}, claudeMissing = false, accounts = false } = {}) {
   const dir = tmp('deck-dir-');
   const dataDir = join(dir, 'data');
   mkdirSync(dataDir, { recursive: true });
   if (seed) writeFileSync(join(dataDir, 'state.json'), JSON.stringify(seed));
-  // why: the fake exo reads its scenario from this file, so a test can drive the run phases.
+  const acc = accounts ? accountsFixture(dir, dataDir) : { claudeJsonPath: null, env: {} };
   const scenarioFile = join(dir, 'scenario.json');
   writeFileSync(scenarioFile, JSON.stringify(scenario));
   const claudePath = claudeMissing ? join(dir, 'no-such-claude') : fakeClaude(dir, steps, { init, initFor });
-  const app = createApp({ dataDir, claudePath, pluginRoot: plugin(), distDir: DIST, parentEnv: { ...process.env, FAKE_EXO_SCENARIO: scenarioFile } });
+  const app = createApp({ dataDir, claudePath, pluginRoot: plugin(), distDir: DIST, claudeJsonPath: acc.claudeJsonPath, parentEnv: { ...process.env, FAKE_EXO_SCENARIO: scenarioFile, ...acc.env } });
   const { port, url } = await app.start();
   const token = new URL(url).hash.replace(/^#token=/, '');
   const api = async (method, path, body) => {

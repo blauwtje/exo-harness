@@ -42,13 +42,13 @@ async function killOldGroup(job, graceMs) {
   return (await groupMembers(job.pgid)).length === 0;
 }
 
-const claudeSessionExists = (job) => {
-  const dir = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'projects', job.worktree.replace(/[^A-Za-z0-9]/g, '-'));
+const claudeSessionExists = (job, configDir) => {
+  const dir = join(configDir ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'projects', job.worktree.replace(/[^A-Za-z0-9]/g, '-'));
   return existsSync(join(dir, `${job.sessionId}.jsonl`));
 };
 
 export async function reconcile({
-  store, state, supervisor, sessionExists = claudeSessionExists, graceMs = loadStages().killGraceMs, skip = () => false, ...sessionOpts
+  store, state, supervisor, sessionExists = claudeSessionExists, configDirOf = () => null, graceMs = loadStages().killGraceMs, skip = () => false, ...sessionOpts
 }) {
   const results = [];
   for (const job of state.jobs) {
@@ -62,7 +62,7 @@ export async function reconcile({
     };
     if (!(await killOldGroup(job, graceMs))) { crash('old-group-alive'); continue; }
     if (!job.worktree || !existsSync(job.worktree)) { crash('worktree-missing'); continue; }
-    if (!job.sessionId || !sessionExists(job)) { crash('session-missing'); continue; }
+    if (!job.sessionId || !sessionExists(job, configDirOf(job))) { crash('session-missing'); continue; }
     const card = state.cards.find((c) => c.id === job.cardId);
     if (!card) { crash('card-missing'); continue; }
     try {

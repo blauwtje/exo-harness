@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, isAbsolute, join, normalize } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { admit, overageActive } from './admission.mjs';
+import { DEFAULT_ACCOUNT, DEFAULT_ID, accountEnv, accountList, accountView, claudeJsonPath as claudeJsonOf, createAccountAuth, isDefault, loginCommand, readClaudeJson, slugId, windowsFromClaudeJson } from './accounts.mjs';
 import { checkAuth } from './auth.mjs';
 import { watchHardStop } from './hard-stop.mjs';
 import { checkHealth } from './health.mjs';
@@ -72,6 +73,9 @@ const ROUTES = [
   ['POST', '/api/jobs/:id/continue', 'continue'],
   ['POST', '/api/jobs/:id/stop', 'stop'],
   ['POST', '/api/stop-all', 'stopAll'],
+  ['POST', '/api/accounts', 'addAccount'],
+  ['POST', '/api/accounts/:id/remove', 'removeAccount'],
+  ['POST', '/api/accounts/:id/check', 'checkAccount'],
   ['GET', '/api/settings', 'getSettings'],
   ['PUT', '/api/settings', 'putSettings'],
   ['POST', '/api/budget', 'budget'],
@@ -100,7 +104,7 @@ function routeTable(handlers) {
 
 export function createApp({
   dataDir, claudePath = 'claude', pluginRoot, distDir = null, parentEnv = process.env, token = randomBytes(32).toString('hex'),
-  onNeedsYou, statuslinePath, drainMs = 5000, limitOptions = {}, offlineOptions = {},
+  onNeedsYou, statuslinePath, claudeJsonPath = null, drainMs = 5000, limitOptions = {}, offlineOptions = {},
 }) {
   const baseStore = createStore(dataDir);
   const state = baseStore.load();
@@ -120,14 +124,16 @@ export function createApp({
 
   const qm = createQueue(state);
   const statuslineCachePath = statuslinePath ?? null;
-  let eventUsage = {};
-  let overage = null;
+  const eventUsage = new Map();
+  const overageByAccount = new Map();
+  const anyOverage = () => [...overageByAccount.values()].find(overageActive) ?? overageByAccount.get(DEFAULT_ID) ?? null;
   let overageAllowedByUser = false;
   const settingsNow = () => ({ ...loadSettings(dataDir), overageAllowed: overageAllowedByUser });
   state.needs = (state.needs ?? []).filter((n) => n.kind === 'budget');
   const addNeed = (item) => { const n = { id: `need-${randomBytes(6).toString('hex')}`, options: ['approve', 'reject'], ...item }; state.needs.push(n); return n; };
   function syncOverage() {
     const has = state.needs.find((n) => n.kind === 'overage');
+    const overage = anyOverage();
     const active = overageActive(overage) && !overageAllowedByUser;
     if (active && !has) addNeed({ id: 'overage', kind: 'overage', resetsAt: overage.resetsAt ?? null, options: ['allow'] });
     else if (!active && has) state.needs = state.needs.filter((n) => n !== has);
@@ -135,12 +141,42 @@ export function createApp({
     store.save(state);
   }
   const liveRuns = () => state.jobs.filter((j) => j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot);
-  const usageNow = () => ({
-    ...mergeUsage(eventUsage, (statuslineCachePath ? readStatuslineCache(statuslineCachePath) : {}), ...[...new Set(liveRuns().map((j) => j.runRoot))].map(readIterLogUsage)),
-    overage,
+  const accountAuth = createAccountAuth({ claudePath, parentEnv });
+  const accountsNow = () => accountList(loadSettings(dataDir));
+  const findAccount = (id) => accountsNow().find((a) => a.id === id) ?? (() => { throw fail(404, 'unknown account'); })();
+  const accountOf = (j) => {
+    const id = j?.account ?? DEFAULT_ID;
+    return id === DEFAULT_ID ? DEFAULT_ACCOUNT : accountsNow().find((a) => a.id === id) ?? DEFAULT_ACCOUNT;
+  };
+  const stageAccount = (stage) => {
+    const id = loadSettings(dataDir).accountByStage?.[stage] ?? DEFAULT_ID;
+    return accountsNow().some((a) => a.id === id) ? id : DEFAULT_ID;
+  };
+  const envOf = (j, base = parentEnv) => accountEnv(base, accountOf(j));
+  const newJob = (fields) => Object.assign(addJob(state, fields), { account: stageAccount(fields.stage) });
+  const liveUsage = (id = DEFAULT_ID) => ({
+    ...mergeUsage(eventUsage.get(id), (id === DEFAULT_ID && statuslineCachePath ? readStatuslineCache(statuslineCachePath) : {}),
+      ...[...new Set(liveRuns().filter((j) => accountOf(j).id === id).map((j) => j.runRoot))].map(readIterLogUsage)),
+    overage: overageByAccount.get(id) ?? null,
   });
+  const freshJsonWindows = (account, now = Date.now()) => Object.fromEntries(Object.entries(windowsFromClaudeJson(readClaudeJson(claudeJsonOf(account, claudeJsonPath))))
+    .filter(([, w]) => typeof w.resetsAt !== 'number' || w.resetsAt * 1000 >= now));
+  const usageNow = (id = DEFAULT_ID) => {
+    const live = liveUsage(id);
+    if (id === DEFAULT_ID) return live;
+    const account = accountsNow().find((a) => a.id === id);
+    return account ? { ...mergeUsage(freshJsonWindows(account), live), overage: live.overage } : live;
+  };
+  const windowsOf = (account) => liveUsage(account.id);
+  const viewOf = (account, now = Date.now()) => accountView({
+    account, auth: accountAuth.get(account.id), claudeJson: readClaudeJson(claudeJsonOf(account, claudeJsonPath)), windows: windowsOf(account), now,
+  });
+  const accountsView = () => { const now = Date.now(); return accountsNow().map((a) => viewOf(a, now)); };
   const runningCount = (except) => state.jobs.filter((j) => j.id !== except && ['starting', 'running'].includes(j.status)).length;
-  const check = (stage, except) => admit({ stage, usage: usageNow(), settings: settingsNow(), history: state.utilizationHistory, running: runningCount(except), queue: qm.snapshot() });
+  const check = (stage, except) => {
+    const account = accountOf(state.jobs.find((j) => j.id === except)).id;
+    return admit({ stage, usage: usageNow(account), settings: settingsNow(), history: state.utilizationHistory, running: runningCount(except), queue: qm.snapshot(), account });
+  };
 
   function holdBack(j, v, extra = {}) {
     Object.assign(j, { status: 'queued', queued: { ...extra, reason: v.reason, rateLimitType: v.rateLimitType, resetsAt: v.resetsAt } });
@@ -151,9 +187,10 @@ export function createApp({
 
   function observe(jobId, event) {
     const at = Date.now();
-    eventUsage = mergeUsage(eventUsage, usageFromEvent(event, at));
+    const account = accountOf(state.jobs.find((x) => x.id === jobId)).id;
+    eventUsage.set(account, mergeUsage(eventUsage.get(account), usageFromEvent(event, at)));
     const parsed = parseRateLimitEvent(event, at);
-    if (parsed) overage = { ...parsed.overage, resetsAt: parsed.windows[parsed.rateLimitType]?.resetsAt ?? null };
+    if (parsed) overageByAccount.set(account, { ...parsed.overage, resetsAt: parsed.windows[parsed.rateLimitType]?.resetsAt ?? null });
     if (parsed) syncOverage();
     const hit = detectLimit(event);
     if (hit) limitHit(jobId, hit);
@@ -162,17 +199,17 @@ export function createApp({
 
   const startUtil = new Map();
   const lastUtil = new Map();
-  const advisoryStageUtilization = (stage) => {
+  const advisoryStageUtilization = (j) => {
     let windows;
-    try { windows = stageWindows(stage); } catch { return undefined; }
-    return usageNow()[windows[0]]?.utilization;
+    try { windows = stageWindows(j.stage); } catch { return undefined; }
+    return usageNow(accountOf(j).id)[windows[0]]?.utilization;
   };
   function recordResult(jobId, event, at) {
     const j = state.jobs.find((x) => x.id === jobId);
     if (!j) return;
     const row = ledgerRow(event, j.ledger?.at(-1), at);
     if (row) (j.ledger ??= []).push(row);
-    const to = advisoryStageUtilization(j.stage);
+    const to = advisoryStageUtilization(j);
     if (typeof to === 'number') lastUtil.set(j.id, to);
     store.save(state);
   }
@@ -188,7 +225,7 @@ export function createApp({
 
   const limitTimers = new Set();
   const limiter = createLimitTimer({
-    queue: { ...qm, resume: (reason, type) => { qm.resume(reason, type); store.save(state); drain(); } },
+    queue: { ...qm, resume: (reason, type, account) => { qm.resume(reason, type, account); store.save(state); drain(); } },
     setTimer: (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); limitTimers.add(t); return t; },
     ...limitOptions,
   });
@@ -203,7 +240,7 @@ export function createApp({
   function limitHit(jobId, hit) {
     const j = state.jobs.find((x) => x.id === jobId);
     if (!j || FINAL.has(j.status)) return;
-    limiter.hit(hit);
+    limiter.hit({ ...hit, account: accountOf(j).id });
     Object.assign(j, { status: 'queued', limitHit: hit, queued: { reason: 'paused', rateLimitType: hit.rateLimitType, resetsAt: hit.resetsAt } });
     qm.enqueue(j.id);
     store.save(state);
@@ -253,7 +290,7 @@ export function createApp({
   }
 
   async function beginResume(j, card) {
-    const r = await resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv }).catch((e) => ({ ok: false, text: e.message }));
+    const r = await resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv: envOf(j) }).catch((e) => ({ ok: false, text: e.message }));
     if (!r.ok) return runFailed(j, r.text);
     resumed(j, card);
   }
@@ -272,7 +309,6 @@ export function createApp({
     (await sessions.get(j.id))?.end();
   }
 
-  // why: Decision 15; a find-cause job is done on a `done` turn and its last text is the summary.
   async function finishCause(j, turn) {
     if (turn.class !== 'done') return wait(j, turn.class === 'question' ? { question: turn.questions } : { lastText: turn.text });
     delete j.question;
@@ -295,9 +331,9 @@ export function createApp({
 
   function launch(opts) {
     const { job: j } = opts;
-    startUtil.set(j.id, advisoryStageUtilization(j.stage));
+    startUtil.set(j.id, advisoryStageUtilization(j));
     lastUtil.delete(j.id);
-    const p = supervisor.start({ claudePath, parentEnv, pluginRoot, ...opts, ...sessionOpts(j, opts.card) });
+    const p = supervisor.start({ claudePath, parentEnv, pluginRoot, ...opts, parentEnv: envOf(j, opts.parentEnv ?? parentEnv), ...sessionOpts(j, opts.card) });
     sessions.set(j.id, p);
     p.then((sess) => sess.done).then(({ reason, verdict }) => {
       for (const [id, a] of pending) if (a.jobId === j.id) pending.delete(id);
@@ -320,14 +356,19 @@ export function createApp({
     return p;
   }
 
-  async function gateAuth() {
-    const auth = await checkAuth({ claudePath, parentEnv });
+  async function gateAuth(stage) {
+    const account = accountOf({ account: stageAccount(stage) });
+    const auth = isDefault(account)
+      ? await checkAuth({ claudePath, parentEnv })
+      : await checkAuth({ claudePath, parentEnv: accountEnv(parentEnv, account), login: loginCommand(account) });
+    if (!isDefault(account)) accountAuth.remember(account.id, auth);
     if (!auth.ok) throw fail(412, `${auth.reason}. Fix: ${auth.fix}`);
   }
 
   let reconciling = null;
+  const configDirOf = (j) => accountOf(j).configDir;
   const reconcileOnce = () => (reconciling ??= reconcile({
-    store, state, supervisor: { start: (o) => launch({ ...o }) }, skip: (j) => sessions.has(j.id), claudePath, parentEnv,
+    store, state, supervisor: { start: (o) => launch({ ...o }) }, skip: (j) => sessions.has(j.id), claudePath, parentEnv, configDirOf,
   }).finally(() => { reconciling = null; }));
 
   async function reconcileAndCheck() {
@@ -342,7 +383,6 @@ export function createApp({
   const projectOf = (card) => state.projects.find((p) => p.key === card.projectKey);
   const cardOf = (id) => state.cards.find((c) => c.id === id) ?? (() => { throw fail(404, `unknown card: ${id}`); })();
 
-  // why: the deck shows exo's own text and reads the main checkout without touching it (S-17).
   async function ffRefused(j, project) {
     if (j.run.phase !== 'refused' || !String(j.run.reason).startsWith('could not fast-forward') || j.needsYou) return;
     const status = await git('git', ['-C', project.path, 'status', '--porcelain']).then((r) => r.stdout, (e) => String(e.message));
@@ -379,7 +419,6 @@ export function createApp({
     return j;
   }
 
-  // why: Decisions 10-13 and 17 and 22; every run phase becomes a card, an archive or a lane move.
   const FINAL_RUN = new Set(FINAL_PHASES.filter((p) => p !== 'parked'));
   const RUN_ID = /^[A-Za-z0-9][\w.-]*$/;
   const SAFE_REF = /^[A-Za-z0-9][\w./-]*$/;
@@ -412,7 +451,6 @@ export function createApp({
     store.save(state);
   }
 
-  // why: the worktree goes only after the archive exists (M10); a removal failure never undoes the landing.
   async function finishLanded(j, card, project) {
     watchers.get(j.id)?.stop();
     if (!j.archived) await archive(j);
@@ -472,7 +510,7 @@ export function createApp({
     if (!run.resumed) {
       run.resumed = true;
       store.save(state);
-      const r = await resumeRun({ pluginRoot, cwd: j.runRoot, runId: run.id, parentEnv });
+      const r = await resumeRun({ pluginRoot, cwd: j.runRoot, runId: run.id, parentEnv: envOf(j) });
       if (r.ok) { attach(j); rerun.add(j.id); return; }
       reason = r.text;
     }
@@ -480,7 +518,6 @@ export function createApp({
     runFailed(j, reason);
   }
 
-  // why: the watch SIGTERMed this run for an apiKeySource or cwd breach; it is archived and stopped, never resumed (Decisions 12, 13).
   async function invariantStop(j) {
     if (j.status === 'stopped') return;
     watchers.get(j.id)?.stop();
@@ -567,7 +604,6 @@ export function createApp({
     return j;
   };
 
-  // why: Decisions 6, 16, 7 and 8 in order; every stop is a card with Retry, never a bug card.
   async function startFor(j, card) {
     const project = projectOf(card);
     const plan = await readPlan(j.brief);
@@ -579,11 +615,11 @@ export function createApp({
     if (!provider.ok) return refuse(provider.text);
     const setup = cwd === j.worktree ? await runSetup(project, j.worktree, project.path, parentEnv) : { ok: true };
     if (!setup.ok) return stopWith(j, 'setup', { kind: 'setup', command: setup.command, tail: setup.tail, options: ['retry'] });
-    const res = await startRun({ pluginRoot, cwd, brief: j.brief, parentEnv });
+    const res = await startRun({ pluginRoot, cwd, brief: j.brief, parentEnv: envOf(j) });
     if (res.refusal === 'lock') return queue({ j, card, cwd, text: res.text });
     if (res.refusal) return refuse(res.text);
-    // why: Decision 12 allows one automatic resume per job, so a retried run keeps the spent one.
-    Object.assign(j, { status: 'running', run: { id: res.runId, ...(j.run?.resumed && { resumed: true }) }, runRoot: cwd });
+    const spentAutoResume = j.run?.resumed && { resumed: true };
+    Object.assign(j, { status: 'running', run: { id: res.runId, ...spentAutoResume }, runRoot: cwd });
     for (const k of ['needsYou', 'outcome', 'queued', 'archived', 'initMismatches']) delete j[k];
     card.lane = 'Approved';
     store.save(state);
@@ -592,7 +628,7 @@ export function createApp({
   }
 
   const handlers = {
-    state: () => ({ ...state, pending: [...pending.values()], usage: usageNow() }),
+    state: () => ({ ...state, pending: [...pending.values()], usage: usageNow(), accounts: accountsView() }),
     health: () => reconcileAndCheck(),
     async addProject({ body }) {
       const path = text(body.path, 'path');
@@ -614,10 +650,10 @@ export function createApp({
     async shape({ id }) {
       const card = state.cards.find((c) => c.id === id) ?? (() => { throw fail(404, `unknown card: ${id}`); })();
       if (state.jobs.some((j) => j.cardId === id && !FINAL.has(j.status))) throw fail(409, 'card already has a running job');
-      await gateAuth();
+      await gateAuth('spec');
       const project = state.projects.find((p) => p.key === card.projectKey);
       const wt = await createWorktree(project.path, card.title).catch((e) => { throw fail(500, `worktree failed: ${e.message}`); });
-      const j = addJob(state, { cardId: id, stage: 'spec' });
+      const j = newJob({ cardId: id, stage: 'spec' });
       Object.assign(j, { worktree: wt.path, startedAt: Date.now() });
       store.save(state);
       const v = check('spec', j.id);
@@ -632,8 +668,8 @@ export function createApp({
       const from = body?.jobId === undefined ? state.jobs.findLast((x) => x.cardId === id && x.worktree) : job(body.jobId);
       if (body?.jobId !== undefined && (from.cardId !== id || from.needsYou?.kind !== 'conflict')) throw fail(409, 'job is not a conflict gate of this card');
       if (!from?.worktree || !existsSync(from.worktree)) throw fail(409, 'card has no worktree to inspect');
-      await gateAuth();
-      const j = addJob(state, { cardId: id, stage: 'find-cause' });
+      await gateAuth('find-cause');
+      const j = newJob({ cardId: id, stage: 'find-cause' });
       Object.assign(j, { worktree: from.worktree, startedAt: Date.now() });
       store.save(state);
       const v = check('find-cause', j.id);
@@ -658,7 +694,7 @@ export function createApp({
         }
         delete card.collision;
         delete shaped.needsYou;
-        const j = addJob(state, { cardId: id, stage: 'run' });
+        const j = newJob({ cardId: id, stage: 'run' });
         const v = check('run', j.id);
         Object.assign(j, { worktree: shaped.worktree, brief: shaped.brief, startedAt: Date.now() });
         if (!v.ok) return holdBack(j, v);
@@ -683,7 +719,7 @@ export function createApp({
       approving.add(id);
       try { return await startFor(Object.assign(j, { status: 'running' }), cardOf(j.cardId)); } finally { approving.delete(id); }
     },
-    approveGate: ({ id }) => again(id, ['gate', 'conflict', 'limit'], (j) => approveRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv })),
+    approveGate: ({ id }) => again(id, ['gate', 'conflict', 'limit'], (j) => approveRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv: envOf(j) })),
     resumeRunRoute({ id }) {
       const j = job(id);
       if (j.initMismatches?.length) throw fail(409, 'a run stopped by the init check is never resumed');
@@ -693,7 +729,7 @@ export function createApp({
         delete j.needsYou;
         return holdBack(j, v, { resume: true });
       }
-      return again(id, ['run-failed'], (j) => resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv }));
+      return again(id, ['run-failed'], (j) => resumeRun({ pluginRoot, cwd: j.runRoot, runId: j.run.id, parentEnv: envOf(j) }));
     },
     rejectGate({ id }) {
       const j = job(id);
@@ -772,9 +808,48 @@ export function createApp({
       return { ok: true };
     },
     transcript: ({ id }) => baseStore.readEvents(job(id).id),
+    async addAccount({ body }) {
+      const name = text(body?.name, 'name').trim();
+      const { accounts } = loadSettings(dataDir);
+      const id = slugId(name, accounts.map((a) => a.id));
+      let configDir = body.configDir ?? null;
+      if (configDir === null || configDir === '') configDir = join(dataDir, 'accounts', id);
+      else if (typeof configDir !== 'string' || !isAbsolute(configDir)) throw fail(400, 'configDir must be an absolute path');
+      else configDir = normalize(configDir).replace(/(.)\/$/, '$1');
+      if (accounts.some((a) => a.configDir === configDir)) throw fail(409, `account ${accounts.find((a) => a.configDir === configDir).id} already uses ${configDir}`);
+      const account = { id, name, configDir };
+      checked(saveSettings(dataDir, { accounts: [...accounts, account] }));
+      try {
+        mkdirSync(configDir, { recursive: true, mode: 0o700 });
+      } catch (e) {
+        saveSettings(dataDir, { accounts });
+        throw fail(400, `cannot create ${configDir}: ${e.code ?? e.message}`);
+      }
+      await accountAuth.refresh(account);
+      store.save(state);
+      return viewOf(account);
+    },
+    removeAccount({ id }) {
+      if (id === DEFAULT_ID) throw fail(400, 'the default account cannot be removed');
+      const settings = loadSettings(dataDir);
+      findAccount(id);
+      if (state.jobs.some((j) => j.account === id && !FINAL.has(j.status))) throw fail(409, 'a live job uses this account');
+      const moved = Object.fromEntries(Object.entries(settings.accountByStage).filter(([, a]) => a === id).map(([stage]) => [stage, DEFAULT_ID]));
+      checked(saveSettings(dataDir, { accounts: settings.accounts.filter((a) => a.id !== id), accountByStage: moved }));
+      accountAuth.forget(id);
+      store.save(state);
+      return { ok: true, id };
+    },
+    async checkAccount({ id }) {
+      const account = findAccount(id);
+      await accountAuth.refresh(account);
+      store.save(state);
+      return viewOf(account);
+    },
     getSettings: () => settingsNow(),
     putSettings({ body }) {
       if (body && 'overageAllowed' in body) throw fail(400, 'overageAllowed is not set here');
+      if (body && 'accounts' in body) throw fail(400, 'accounts are changed with /api/accounts');
       const now = loadSettings(dataDir).ceilings;
       const raised = {};
       const rest = body?.ceilings && typeof body.ceilings === 'object' ? { ...body, ceilings: { ...body.ceilings } } : body;
@@ -801,7 +876,7 @@ export function createApp({
       return { applied: true };
     },
     allowOverage() {
-      if (!overageActive(overage)) throw fail(409, 'no overage is active');
+      if (!overageActive(anyOverage())) throw fail(409, 'no overage is active');
       overageAllowedByUser = true;
       syncOverage();
       drain();
@@ -860,9 +935,12 @@ export function createApp({
       const actual = await server.listen(port);
       const url = `http://127.0.0.1:${actual}/#token=${token}`;
       const auth = await checkAuth({ claudePath, parentEnv });
+      accountAuth.remember(DEFAULT_ID, auth);
+      const others = accountsNow().filter((a) => !isDefault(a));
+      if (others.length) Promise.all(others.map((a) => accountAuth.refresh(a))).then(() => { if (!closed) push('state', state); });
       if (auth.ok) {
         const wrapped = { start: (o) => launch({ ...o }) };
-        await reconcile({ store, state, supervisor: wrapped, claudePath, parentEnv });
+        await reconcile({ store, state, supervisor: wrapped, claudePath, parentEnv, configDirOf });
       }
       for (const j of state.jobs) {
         if (j.stage === 'run' && j.status === 'running' && j.run?.id && j.runRoot) { attach(j); onRun(j); }
@@ -870,7 +948,7 @@ export function createApp({
       }
       limiter.restore();
       await offlineProbe.start();
-      hardStop = watchHardStop({ getUsage: usageNow, settings: settingsNow, runs: liveRuns });
+      hardStop = watchHardStop({ getUsage: usageNow, settings: settingsNow, runs: liveRuns, usageOf: (j) => usageNow(accountOf(j).id) });
       drainTimer = setInterval(drain, drainMs);
       drainTimer.unref();
       drain();

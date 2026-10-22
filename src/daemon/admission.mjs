@@ -6,7 +6,9 @@ const no = (reason, rateLimitType = null, resetsAt = null) => ({ ok: false, reas
 
 export const overageActive = (o) => Boolean(o) && (o.isUsingOverage === true || (o.status != null && o.status !== 'rejected'));
 
-export const holds = (paused, windows) => paused && (paused.reason !== 'limit' || !paused.rateLimitType || windows.includes(paused.rateLimitType));
+export const pauseAccount = (p) => p?.account ?? 'default';
+export const holds = (paused, windows, account = 'default') => paused
+  && (paused.reason !== 'limit' || (pauseAccount(paused) === account && (!paused.rateLimitType || windows.includes(paused.rateLimitType))));
 
 const count = (running) => (Array.isArray(running) ? running.length : Number(running) || 0);
 
@@ -22,10 +24,10 @@ function overCeiling({ windows, usage, settings, delta }) {
   return null;
 }
 
-export function admit({ stage, usage, settings, history, running, queue }) {
+export function admit({ stage, usage, settings, history, running, queue, account = 'default' }) {
   const windows = stageWindows(stage);
   const pauses = queue?.pauses?.length ? queue.pauses : queue?.paused ? [queue.paused] : [];
-  const paused = pauses.find((p) => holds(p, windows));
+  const paused = pauses.find((p) => holds(p, windows, account));
   if (paused) return no('paused', paused.rateLimitType ?? null, paused.resetsAt ?? null);
   if (overageActive(usage?.overage) && !settings.overageAllowed) return no('overage', null, usage.overage.resetsAt ?? null);
   if (count(running) >= settings.maxConcurrent) return no('concurrency');

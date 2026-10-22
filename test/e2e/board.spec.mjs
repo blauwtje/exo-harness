@@ -2,12 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { boot, repo, stateOf, until, withCards } from './fixture.mjs';
 
-const LANES = ['Inbox', 'Shaped', 'Approved', 'Queued', 'Running', 'Review', 'Done'];
+const LANES = ['Inbox', 'Planned', 'Approved', 'Queued', 'Running', 'Review', 'Done'];
 let t;
 test.afterEach(async () => { await t?.close(); t = null; });
 
 const board = (page) => page.getByRole('group', { name: /^Board for / });
-const lane = (page, name) => page.getByRole('region', { name: new RegExp(`^${name}, \\d+ cards?$`) });
+const lane = (page, name) => page.getByRole('region', { name: new RegExp(`^${name}, \\d+ tasks?$`) });
+const stop = (page, name) => page.getByRole('list', { name: 'Stations' }).locator(`.stop[data-lane="${name}"]`);
 
 async function settledBox(locator) {
   let previous = null;
@@ -25,37 +26,42 @@ async function drag(page, from, to) {
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
   await page.mouse.move(a.x + a.width / 2 + 12, a.y + a.height / 2 + 12, { steps: 4 });
-  await expect(to).not.toHaveClass(/lane-collapsed/);
   const b = await settledBox(to);
-  await page.mouse.move(b.x + b.width / 2, b.y + 80, { steps: 12 });
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
   await page.mouse.up();
 }
 
 test.describe('gauges and frame', () => {
-  test('each gauge draws its used fraction; no reading draws no arc', async ({ page }) => {
+  test('each usage bar draws its used fraction; no reading draws no fill', async ({ page }) => {
     t = await boot({ steps: ['rate'] });
     const { cards } = await withCards(t, ['Gauge card']);
     await page.goto(t.deckUrl);
-    await expect(page.locator('[data-gauge] .arc-fill')).toHaveCount(0);
+    await expect(page.locator('[data-gauge] .gbar-fill')).toHaveCount(0);
     await t.api('POST', `/api/cards/${cards[0].id}/shape`);
-    const dash = async (id) => Number((await page.locator(`[data-gauge="${id}"] .arc-fill`).getAttribute('stroke-dasharray')).split(' ')[0]);
-    await expect.poll(() => dash('five_hour')).toBeCloseTo(42, 0);
-    expect(await dash('seven_day')).toBeCloseTo(18, 0);
+    const used = async (id) => {
+      const fill = page.locator(`header.top [data-gauge="${id}"] .gbar-fill`);
+      if (!(await fill.count())) return null;
+      return fill.evaluate((el) => (100 * el.getBoundingClientRect().width) / el.parentElement.getBoundingClientRect().width);
+    };
+    await expect.poll(() => used('five_hour')).toBeCloseTo(42, 0);
+    expect(await used('seven_day')).toBeCloseTo(18, 0);
   });
 
-  test('a loaded lane has a loaded joint and an empty lane does not', async ({ page }) => {
+  test('a loaded stop is marked loaded, an empty stop is not and draws no lane', async ({ page }) => {
     t = await boot();
     await withCards(t, ['Loaded card']);
     await page.goto(t.deckUrl);
-    await expect(lane(page, 'Inbox')).toHaveAttribute('data-load', 'true');
-    await expect(lane(page, 'Shaped')).toHaveAttribute('data-load', 'false');
+    await expect(stop(page, 'Inbox')).toHaveAttribute('data-load', 'true');
+    await expect(stop(page, 'Shaped')).toHaveAttribute('data-load', 'false');
+    await expect(lane(page, 'Inbox')).toBeVisible();
+    await expect(lane(page, 'Planned')).toHaveCount(0);
   });
 
-  test('without a connection Stop all is disabled and no gauge arc or crew panel is drawn', async ({ page }) => {
+  test('without a connection Stop all is not offered and no usage bar or agents panel is drawn', async ({ page }) => {
     t = await boot();
     await page.goto(`http://127.0.0.1:${t.port}/#token=${'x'.repeat(40)}`);
-    await expect(page.getByRole('button', { name: 'Stop all' })).toBeDisabled();
-    await expect(page.locator('.arc-fill')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Stop all' })).toHaveCount(0);
+    await expect(page.locator('.gbar-fill')).toHaveCount(0);
     await expect(page.locator('.crew')).toHaveCount(0);
   });
 
@@ -64,58 +70,58 @@ test.describe('gauges and frame', () => {
     const { project } = await withCards(t, ['First']);
     await page.goto(t.deckUrl);
     const linkState = page.locator('.linkstate');
-    await expect(linkState).toHaveText('Connected');
     await expect(lane(page, 'Inbox')).toContainText('First');
+    await expect(linkState).toHaveCount(0);
     let loads = 0;
     await page.route('**/api/state', (route) => (loads++ === 0 ? route.abort() : route.continue()));
     await t.api('POST', '/api/cards', { projectKey: project.key, title: 'Second' });
     await expect.poll(() => loads).toBeGreaterThan(0);
     expect((await stateOf(t)).cards).toHaveLength(2);
-    await expect(linkState).toHaveText('Connected');
+    await expect(linkState).toHaveCount(0);
     await expect(lane(page, 'Inbox')).toContainText('Second');
   });
 });
 
 test.describe('lanes and cards', () => {
-  test('shows the lanes from Inbox to Done in order', async ({ page }) => {
+  test('shows the stations from Inbox to Done in order', async ({ page }) => {
     t = await boot();
     await withCards(t, ['First card']);
     await page.goto(t.deckUrl);
     await expect(board(page)).toBeVisible();
-    await expect(board(page).getByRole('heading', { level: 2 })).toHaveText(LANES);
+    await expect(board(page).locator('.stop .stop-name')).toHaveText(LANES);
     await expect(lane(page, 'Inbox')).toContainText('First card');
   });
 
-  test('adds a manual card to Inbox', async ({ page }) => {
+  test('adds a manual task to Inbox', async ({ page }) => {
     t = await boot();
     await withCards(t);
     await page.goto(t.deckUrl);
-    await page.getByRole('button', { name: 'New card' }).click();
-    const dialog = page.getByRole('dialog', { name: 'New card' });
+    await page.getByRole('button', { name: 'New task' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New task' });
     await dialog.getByLabel('Title').fill('Write the greeting');
-    await dialog.getByRole('button', { name: 'Add card' }).click();
+    await dialog.getByRole('button', { name: 'Add task' }).click();
     await expect(lane(page, 'Inbox').getByRole('heading', { name: 'Write the greeting' })).toBeVisible();
     const cards = (await stateOf(t)).cards;
     expect(cards.map((c) => [c.title, c.lane])).toEqual([['Write the greeting', 'Inbox']]);
   });
 
-  test('the Shape button runs Shape and the card ends in Shaped', async ({ page }) => {
+  test('the Plan button runs Plan and the task ends in Planned', async ({ page }) => {
     t = await boot({ steps: ['brief'] });
     const { cards } = await withCards(t, ['Greet']);
     await page.goto(t.deckUrl);
-    await lane(page, 'Inbox').getByRole('button', { name: 'Shape', exact: true }).click();
-    await expect(lane(page, 'Shaped').getByRole('heading', { name: 'Greet' })).toBeVisible();
+    await lane(page, 'Inbox').getByRole('button', { name: 'Plan', exact: true }).click();
+    await expect(lane(page, 'Planned').getByRole('heading', { name: 'Greet' })).toBeVisible();
     const s = await stateOf(t);
     expect(s.cards.find((c) => c.id === cards[0].id).lane).toBe('Shaped');
     expect(s.jobs).toHaveLength(1);
   });
 
-  test('dragging Inbox to Shaped runs Shape', async ({ page }) => {
+  test('dragging Inbox to Planned runs Plan', async ({ page }) => {
     t = await boot({ steps: ['brief'] });
     const { cards } = await withCards(t, ['Dragged']);
     await page.goto(t.deckUrl);
-    await drag(page, page.locator(`[data-card="${cards[0].id}"]`), lane(page, 'Shaped'));
-    await expect(lane(page, 'Shaped').getByRole('heading', { name: 'Dragged' })).toBeVisible();
+    await drag(page, page.locator(`[data-card="${cards[0].id}"]`), stop(page, 'Shaped'));
+    await expect(lane(page, 'Planned').getByRole('heading', { name: 'Dragged' })).toBeVisible();
     expect((await stateOf(t)).jobs).toHaveLength(1);
   });
 
@@ -123,7 +129,7 @@ test.describe('lanes and cards', () => {
     t = await boot({ steps: ['brief'] });
     const { cards } = await withCards(t, ['Stays put']);
     await page.goto(t.deckUrl);
-    await drag(page, page.locator(`[data-card="${cards[0].id}"]`), lane(page, 'Approved'));
+    await drag(page, page.locator(`[data-card="${cards[0].id}"]`), stop(page, 'Approved'));
     await expect(page.getByRole('status').filter({ hasText: /stays in Inbox/ })).toContainText('Inbox to Approved');
     await expect(lane(page, 'Inbox').getByRole('heading', { name: 'Stays put' })).toBeVisible();
     const s = await stateOf(t);
@@ -134,25 +140,47 @@ test.describe('lanes and cards', () => {
 
 test.describe('Needs you', () => {
   const needs = (page) => page.getByRole('region', { name: 'Needs you' });
+  const quiet = (page) => page.getByRole('region', { name: /^Quiet history/ });
+  const openQuiet = async (page, label) => {
+    await quiet(page).getByRole('button', { name: /^Quiet history/ }).click();
+    await quiet(page).getByRole('button', { name: label }).click();
+    return quiet(page).getByRole('listitem').filter({ hasText: label });
+  };
 
   test('is calm when nothing waits', async ({ page }) => {
     t = await boot();
     await withCards(t, ['Idle']);
     await page.goto(t.deckUrl);
-    await expect(needs(page)).toContainText('Nothing is waiting on you.');
+    await expect(needs(page)).toContainText('Nothing waits for you');
+    await expect(quiet(page)).toHaveCount(0);
+  });
+
+  test('an unpicked kind lands in the quiet history, not in Needs you', async ({ page }) => {
+    t = await boot({ steps: ['brief'] });
+    await withCards(t, ['Greet']);
+    await t.api('PUT', '/api/settings', { needsYou: ['question', 'permission'] });
+    await page.goto(t.deckUrl);
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+    await expect(quiet(page).getByRole('button', { name: /^Quiet history/ })).toContainText('1');
+    await expect(needs(page)).toContainText('Nothing waits for you');
+    await expect(needs(page).locator('li[data-kind="brief"]')).toHaveCount(0);
+    await expect(page.locator('.lanes .car-wait')).toHaveCount(0);
+    const brief = await openQuiet(page, 'Greet');
+    await expect(brief).toHaveAttribute('data-kind', 'brief');
+    await expect(brief.getByRole('button', { name: 'Approve' })).toBeVisible();
   });
 
   test('a question card takes a choice and answers the agent', async ({ page }) => {
     t = await boot({ steps: ['ask', 'brief'] });
     await withCards(t, ['Greet']);
     await page.goto(t.deckUrl);
-    await page.getByRole('button', { name: 'Shape', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
     const card = needs(page).getByRole('listitem').filter({ hasText: 'Which greeting style?' });
     await expect(card).toContainText('Question');
     await expect(card.getByRole('button', { name: 'Answer' })).toBeDisabled();
     await card.getByRole('radio', { name: /Casual/ }).click();
     await card.getByRole('button', { name: 'Answer' }).click();
-    await expect(lane(page, 'Shaped')).toContainText('Greet');
+    await expect(lane(page, 'Planned')).toContainText('Greet');
     await expect(card).toHaveCount(0);
     await expect(needs(page).locator('li[data-kind="brief"]')).toContainText('Greet');
   });
@@ -161,29 +189,29 @@ test.describe('Needs you', () => {
     t = await boot({ steps: ['text-question', 'brief'] });
     await withCards(t, ['Greet']);
     await page.goto(t.deckUrl);
-    await page.getByRole('button', { name: 'Shape', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
     const card = needs(page).getByRole('listitem').filter({ hasText: 'Greeting style' });
     await card.getByRole('radio', { name: /Formal/ }).click();
     await card.getByRole('button', { name: 'Send answers' }).click();
-    await expect(lane(page, 'Shaped')).toContainText('Greet');
+    await expect(lane(page, 'Planned')).toContainText('Greet');
   });
 
   test('a permission card allows once', async ({ page }) => {
     t = await boot({ steps: ['perm', 'brief'] });
     await withCards(t, ['Greet']);
     await page.goto(t.deckUrl);
-    await page.getByRole('button', { name: 'Shape', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
     const card = needs(page).getByRole('listitem').filter({ hasText: 'Permission' });
     await expect(card).toContainText('ls docs');
     await card.getByRole('button', { name: 'Allow once' }).click();
-    await expect(lane(page, 'Shaped')).toContainText('Greet');
+    await expect(lane(page, 'Planned')).toContainText('Greet');
   });
 
   test('a permission card can be denied and the agent carries on', async ({ page }) => {
     t = await boot({ steps: ['perm', 'brief'] });
     await withCards(t, ['Greet']);
     await page.goto(t.deckUrl);
-    await page.getByRole('button', { name: 'Shape', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
     const card = needs(page).getByRole('listitem').filter({ hasText: 'Permission' });
     await card.getByRole('button', { name: 'Deny' }).click();
     await expect(card).toBeHidden();
@@ -192,14 +220,16 @@ test.describe('Needs you', () => {
     expect(job.id).toBeTruthy();
   });
 
-  test('an invariant card names the mismatch and opens the job', async ({ page }) => {
+  test('an invariant goes to the quiet history by default, names the mismatch and opens the session', async ({ page }) => {
     t = await boot({ steps: ['brief'], init: { permissionMode: 'bypassPermissions' } });
     await withCards(t, ['Greet']);
     await page.goto(t.deckUrl);
-    await page.getByRole('button', { name: 'Shape', exact: true }).click();
-    const card = needs(page).getByRole('listitem').filter({ hasText: 'Invariant' });
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+    await expect(quiet(page)).toBeVisible();
+    await expect(needs(page).locator('li[data-kind="invariant"]')).toHaveCount(0);
+    const card = await openQuiet(page, 'Invariant');
     await expect(card).toContainText('permissionMode');
-    await card.getByRole('button', { name: 'Open job' }).click();
+    await card.getByRole('button', { name: 'Open session' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Greet' })).toBeVisible();
     await expect(page).toHaveURL(/#\/jobs\/.+/);
   });
@@ -208,7 +238,7 @@ test.describe('Needs you', () => {
     t = await boot({ claudeMissing: true });
     await withCards(t);
     await page.goto(t.deckUrl);
-    const card = needs(page).getByRole('listitem').filter({ hasText: 'claude check failed' });
+    const card = await openQuiet(page, 'claude check failed');
     await expect(card).toContainText('claude binary not found');
     await expect(card).toContainText('npm install -g @anthropic-ai/claude-code');
     await card.getByRole('button', { name: 'Check again' }).click();
@@ -224,7 +254,7 @@ test.describe('runs', () => {
     const { project, cards } = await withCards(t, ['Greet']);
     execFileSync('git', ['-C', project.path, 'branch', 'greet']);
     await page.goto(t.deckUrl);
-    await page.getByRole('button', { name: 'Shape', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
     const brief = needs(page).locator('li[data-kind="brief"]');
     await brief.getByRole('button', { name: 'Approve' }).click();
     const card = page.locator(`[data-card="${cards[0].id}"]`);

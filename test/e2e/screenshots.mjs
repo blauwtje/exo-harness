@@ -10,13 +10,13 @@ mkdirSync(OUT, { recursive: true });
 execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], { stdio: 'inherit' });
 
 const browser = await chromium.launch();
-const shot = async (url, name, { width, height = 900, then } = {}) => {
+const shot = async (url, name, { width, height = 900, then, of } = {}) => {
   const page = await browser.newPage({ viewport: { width, height } });
   await page.goto(url);
   await page.getByRole('main').or(page.locator('main')).first().waitFor();
   await then?.(page);
   await page.waitForTimeout(900);
-  await page.screenshot({ path: `${OUT}${name}.png` });
+  await (of ? of(page) : page).screenshot({ path: `${OUT}${name}.png` });
   await page.close();
 };
 const ready = (page) => page.getByRole('group', { name: /^Board for / }).waitFor();
@@ -29,17 +29,22 @@ const ready = (page) => page.getByRole('group', { name: /^Board for / }).waitFor
   const ask = (await stateOf(t)).pending[0];
   await t.api('POST', `/api/jobs/${job.id}/permission`, { requestId: ask.requestId, allow: true, answers: { 'Which greeting style?': 'Casual' } });
   await until(async () => (await stateOf(t)).jobs[0].status === 'done');
-  for (const width of [1440, 1024]) {
-    await shot(t.deckUrl, `board-${width}`, { width, then: ready });
-    await shot(t.deckUrl, `job-${width}`, { width, then: async (page) => { await ready(page); await page.evaluate((id) => { location.hash = `#/jobs/${id}`; }, job.id); await page.getByRole('region', { name: 'Ledger' }).waitFor(); } });
+  const toTask = async (page) => { await ready(page); await page.evaluate((id) => { location.hash = `#/jobs/${id}`; }, job.id); await page.getByRole('heading', { level: 1, name: 'Add a greeting command' }).waitFor(); };
+  const toSettings = async (page) => { await ready(page); await page.evaluate(() => { location.hash = '#/settings'; }); await page.getByRole('heading', { level: 1, name: 'Settings' }).waitFor(); };
+  const needs = (page) => page.getByRole('region', { name: 'Needs you' });
+  for (const width of [1440, 1024, 390]) {
+    await shot(t.deckUrl, `home-${width}`, { width, then: ready });
+    await shot(t.deckUrl, `needs-you-${width}`, { width, then: ready, of: needs });
+    await shot(t.deckUrl, `task-${width}`, { width, then: toTask });
   }
+  for (const width of [1440, 1024]) await shot(t.deckUrl, `settings-${width}`, { width, then: toSettings });
   await t.close();
 }
 
 {
   const t = await boot();
   await withCards(t);
-  await shot(t.deckUrl, 'board-empty', { width: 1440, then: ready });
+  await shot(t.deckUrl, 'home-empty', { width: 1440, then: ready });
   await t.close();
 }
 
@@ -52,16 +57,27 @@ const ready = (page) => page.getByRole('group', { name: /^Board for / }).waitFor
     await until(async () => (await stateOf(t)).jobs.length > 0);
     await new Promise((r) => setTimeout(r, 400));
   }
-  await until(async () => { const s = await stateOf(t); return s.pending.length >= 3 && s.jobs.every((j) => j.status !== 'queued'); });
+  await until(async () => (await stateOf(t)).pending.length >= 3);
   await until(async () => (await stateOf(t)).jobs.some((j) => j.outcome === 'invariant'), 15000).catch(() => {});
   unlinkSync(join(t.dir, 'claude'));
-  await shot(t.deckUrl, 'board-busy', { width: 1440, height: 1100, then: ready });
+  await shot(t.deckUrl, 'home-busy', { width: 1440, height: 1100, then: ready });
+  await t.close();
+}
+
+{
+  const t = await boot({ accounts: true });
+  await withCards(t, ['Add a greeting command']);
+  const toPage = (hash, title) => async (page) => { await ready(page); await page.evaluate((h) => { location.hash = h; }, hash); await page.getByRole('heading', { level: 1, name: title }).waitFor(); };
+  for (const width of [1440, 390]) {
+    await shot(t.deckUrl, `agents-${width}`, { width, height: 1100, then: toPage('#/agents', 'Agents') });
+    await shot(t.deckUrl, `usage-${width}`, { width, height: 1300, then: toPage('#/usage', 'Usage') });
+  }
   await t.close();
 }
 
 {
   const t = await boot();
-  await shot(`http://127.0.0.1:${t.port}/#token=${'x'.repeat(40)}`, 'board-error', { width: 1440 });
+  await shot(`http://127.0.0.1:${t.port}/#token=${'x'.repeat(40)}`, 'home-error', { width: 1440 });
   await t.close();
 }
 

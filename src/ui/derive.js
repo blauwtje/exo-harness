@@ -1,6 +1,9 @@
 import { FINAL_STATUSES, parseRateLimitEvent } from '../daemon/usage.mjs';
 
 export const LANES = ['Inbox', 'Shaped', 'Approved', 'Queued', 'Running', 'Review', 'Done'];
+const LANE_WORD = { Shaped: 'Planned' };
+export const LINE = { Inbox: 'inbox', Shaped: 'planned', Approved: 'approved', Queued: 'queued', Running: 'running', Review: 'review', Done: 'done' };
+export const laneWord = (lane) => LANE_WORD[lane] ?? lane;
 export { FINAL_STATUSES as FINAL };
 export const isLive = (j) => !FINAL_STATUSES.has(j.status);
 
@@ -9,7 +12,6 @@ export const liveJob = (state, cardId) => state.jobs.findLast((j) => j.cardId ==
 
 export function laneOf(state, card) {
   const j = liveJob(state, card.id);
-  // why: Decision 17; a parked run waits on you in Review, though its job is still live.
   if (j) return j.status === 'queued' ? 'Queued' : j.stage === 'run' && j.status === 'waiting' && card.lane === 'Review' ? 'Review' : 'Running';
   return LANES.includes(card.lane) ? card.lane : 'Inbox';
 }
@@ -20,11 +22,41 @@ export function groupCards(state, projectKey) {
   return lanes;
 }
 
+export const waitingCardIds = (items) => new Set(items.map((i) => i.card?.id ?? i.job?.cardId).filter(Boolean));
+
+export const laneShownCards = (lanes, name, waitIds) => (name === 'Running' ? lanes.Running.filter((c) => !waitIds.has(c.id)) : lanes[name]);
+
+export function workingCards(state, items, projectKey) {
+  if (!state) return [];
+  const waitIds = waitingCardIds(items);
+  return state.cards.filter((c) => (projectKey == null || c.projectKey === projectKey) && laneOf(state, c) === 'Running' && !waitIds.has(c.id));
+}
+export const workingCount = (state, items, projectKey) => workingCards(state, items, projectKey).length;
+
+export function homeCounts(state, projectKey, items) {
+  const lanes = groupCards(state, projectKey);
+  const waitIds = waitingCardIds(items);
+  const running = laneShownCards(lanes, 'Running', waitIds).length;
+  return {
+    lanes,
+    waitIds,
+    needsYou: items.length,
+    running,
+    runningWaitsOnYou: lanes.Running.length - running,
+    working: lanes.Running.some((c) => !waitIds.has(c.id) && liveJob(state, c.id)?.status === 'running'),
+    queued: lanes.Queued.length,
+    review: lanes.Review.length,
+    done: lanes.Done.length,
+  };
+}
+
+export const liveJobCount = (state, projectKey) => (state ? state.jobs.filter((j) => isLive(j)
+  && (projectKey == null || state.cards.find((c) => c.id === j.cardId)?.projectKey === projectKey)).length : 0);
+
 const RANK = {
   invariant: 0, health: 1, failure: 2, 'run-failed': 3, refusal: 4, setup: 5, land: 6, conflict: 7, gate: 8,
   permission: 9, question: 10, brief: 11, 'turn-cap': 12, limit: 8, overage: 2, budget: 13,
 };
-// why: Decision 18; the daemon deletes needsYou once a run kind is answered, so a job carrying one still waits, latest or not.
 export const RUN_KINDS = new Set(['brief', 'gate', 'conflict', 'run-failed', 'setup', 'refusal', 'land', 'limit']);
 
 export function needsYou(state, health) {
@@ -53,6 +85,13 @@ export function needsYou(state, health) {
     if (check && check.ok === false) items.push({ kind: 'health', key: `health:${name}`, name, check });
   }
   return items.sort((a, b) => RANK[a.kind] - RANK[b.kind]);
+}
+
+export const NEEDS_YOU_KINDS = Object.freeze(['question', 'permission', 'brief', 'gate', 'conflict', 'run-failed', 'setup', 'refusal', 'land', 'turn-cap']);
+
+export function splitNeeds(items, kinds) {
+  const picked = new Set(Array.isArray(kinds) ? kinds : NEEDS_YOU_KINDS);
+  return { items: items.filter((i) => picked.has(i.kind)), history: items.filter((i) => !picked.has(i.kind)) };
 }
 
 

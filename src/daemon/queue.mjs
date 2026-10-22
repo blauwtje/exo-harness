@@ -1,4 +1,4 @@
-import { holds } from './admission.mjs';
+import { holds, pauseAccount } from './admission.mjs';
 
 export function createQueue(state) {
   const q = (state.queue ??= {});
@@ -41,11 +41,13 @@ export function createQueue(state) {
       q.projectPriority = [...projectIds];
     },
     pause(cause) {
-      q.pauses = [...q.pauses.filter((p) => p.reason !== cause.reason || (p.rateLimitType ?? null) !== (cause.rateLimitType ?? null)), cause];
+      const same = (p) => p.reason === cause.reason && (p.rateLimitType ?? null) === (cause.rateLimitType ?? null) && pauseAccount(p) === pauseAccount(cause);
+      q.pauses = [...q.pauses.filter((p) => !same(p)), cause];
       sync();
     },
-    resume(reason, rateLimitType) {
-      q.pauses = q.pauses.filter((p) => p.reason !== reason || (rateLimitType !== undefined && (p.rateLimitType ?? null) !== rateLimitType));
+    resume(reason, rateLimitType, account) {
+      q.pauses = q.pauses.filter((p) => p.reason !== reason || (rateLimitType !== undefined && (p.rateLimitType ?? null) !== rateLimitType)
+        || (account !== undefined && pauseAccount(p) !== account));
       sync();
     },
     snapshot() {

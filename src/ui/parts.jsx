@@ -1,8 +1,37 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
+import { useMotionPaused } from './motion.js';
 
-export const spring = { type: 'spring', stiffness: 520, damping: 48, mass: 0.9 };
-export const fade = { duration: 0.16, ease: [0.2, 0, 0, 1] };
+const EASE = [0.22, 1, 0.36, 1];
+export const dur = { quick: 0.12, base: 0.2, slow: 0.28 };
+export const spring = { duration: dur.slow, ease: EASE };
+export const fade = { duration: dur.quick, ease: EASE };
+
+const instant = { duration: 0 };
+const calmFull = { fade, spring, slide: { duration: dur.base, ease: EASE }, fold: { duration: dur.base, ease: EASE }, dialog: { duration: dur.slow, ease: EASE } };
+const calmReduced = { fade, spring: fade, slide: fade, fold: instant, dialog: fade };
+
+export function useCalm() {
+  const reduced = !!useReducedMotion();
+  const [paused] = useMotionPaused();
+  return { reduced, paused, ...(reduced ? calmReduced : calmFull), offset: (px) => (reduced ? 0 : px) };
+}
+
+export function PauseMotion({ className = '' }) {
+  const [paused, setPaused] = useMotionPaused();
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={paused}
+      className={`switch${className ? ` ${className}` : ''}`}
+      onClick={() => setPaused(!paused)}
+    >
+      <span className="switch-track" aria-hidden="true"><span className="switch-thumb" /></span>
+      <span>Pause motion</span>
+    </button>
+  );
+}
 
 export function Mark({ status, label }) {
   return (
@@ -18,7 +47,7 @@ export const STATUS_WORD = {
 
 function statusWord(s, scope) {
   if (s === 'invariant') return 'Invariant broke';
-  if (scope === 'card' && s === 'done') return 'Job done';
+  if (scope === 'card' && s === 'done') return 'Session done';
   return STATUS_WORD[s] ?? s;
 }
 
@@ -53,7 +82,7 @@ export function useBelow(ref, selector, dep) {
 
 export function Count({ n, signal }) {
   return (
-    <motion.span key={n} className={`count${signal && n ? ' count-signal' : ''}`} initial={{ y: -4, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
+    <motion.span key={n} className={`count${signal && n ? ' count-signal' : ''}`} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={fade}>
       {n}
     </motion.span>
   );

@@ -190,28 +190,33 @@ test('S-16 a limit-only gate, a budget raise and the overage item reach the deck
   assert.deepEqual(kinds, ['budget', 'limit', 'overage']);
 });
 
-async function renderNeeds(items) {
+async function needsRenderer() {
   const out = join(tmp('rc-ny-'), 'needs.cjs');
   const req = createRequire(import.meta.url);
   const entry = join(tmp('rc-ny-'), 'entry.jsx');
   writeFileSync(entry, `import { renderToString } from ${JSON.stringify(req.resolve('react-dom/server'))}; import { createElement } from ${JSON.stringify(req.resolve('react'))}; import NeedsYou from ${JSON.stringify(new URL('../src/ui/NeedsYou.jsx', import.meta.url).pathname)}; export const render = (p) => renderToString(createElement(NeedsYou, p));`);
   const bundle = await rolldown({ input: entry, platform: 'node', logLevel: 'silent' });
   await bundle.write({ file: out, format: 'cjs' });
-  return createRequire(import.meta.url)(out).render({ items, deck: { act() {} }, openJob() {} });
+  const { render } = createRequire(import.meta.url)(out);
+  return (items) => render({ items, deck: { act() {} }, openJob() {} });
 }
 
 test('S-16 the deck card of a limit gate, a budget raise and overage carries its actions', async () => {
   const job = { id: 'jobjob', run: { branch: 'b' }, needsYou: { kind: 'limit', gates: ['- limit'], options: ['approve', 'reject'] } };
-  const html = await renderNeeds([
-    { kind: 'limit', key: 'limit:j', job, card: { id: 'c', title: 'Limit card' } },
-    { kind: 'budget', key: 'need:n1', need: { id: 'n1', kind: 'budget', title: 'Raise budget ceilings', change: { ceilings: { fiveHour: 0.9 } } } },
-    { kind: 'overage', key: 'need:overage', need: { id: 'overage', kind: 'overage', resetsAt: 5, options: ['allow'] } },
-  ]);
-  assert.match(html, /Limit card/);
-  assert.match(html, /Raise budget ceilings/);
-  assert.equal((html.match(/>Approve</g) ?? []).length, 2);
-  assert.equal((html.match(/>Reject</g) ?? []).length, 2);
-  assert.match(html, />Allow</);
+  const render = await needsRenderer();
+  const limit = { kind: 'limit', key: 'limit:j', job, card: { id: 'c', title: 'Limit card' } };
+  const budget = { kind: 'budget', key: 'need:n1', need: { id: 'n1', kind: 'budget', title: 'Raise budget ceilings', change: { ceilings: { fiveHour: 0.9 } } } };
+  const overage = { kind: 'overage', key: 'need:overage', need: { id: 'overage', kind: 'overage', resetsAt: 5, options: ['allow'] } };
+  for (const [one, title] of [[limit, /Limit card/], [budget, /Raise budget ceilings/]]) {
+    const html = render([one]);
+    assert.match(html, title);
+    assert.equal((html.match(/>Approve</g) ?? []).length, 1);
+    assert.equal((html.match(/>Reject</g) ?? []).length, 1);
+  }
+  assert.match(render([overage]), />Allow</);
+  const all = render([limit, budget, overage]);
+  assert.match(all, /Limit card/);
+  assert.match(all, /Raise budget ceilings/);
 });
 
 function retrySetup(attempts, waits = [1, 1], admit) {

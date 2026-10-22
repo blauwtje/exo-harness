@@ -11,7 +11,7 @@ const readState = (job) => {
 };
 const validPid = (pid) => Number.isInteger(pid) && pid > 1 && pid !== process.pid;
 
-export function watchHardStop({ getUsage, settings, runs, kill = killGroup, intervalMs = 1000 }) {
+export function watchHardStop({ getUsage, settings, runs, usageOf = null, kill = killGroup, intervalMs = 1000 }) {
   const baseline = new Map();
   const signalled = new Set();
   const stopAtTaskBoundary = (job) => {
@@ -24,11 +24,23 @@ export function watchHardStop({ getUsage, settings, runs, kill = killGroup, inte
     job.outcome = 'hard-stop';
     kill(st.pid, 'SIGTERM');
   };
+  const overLimit = (usage, limit) => {
+    const used = usage?.five_hour?.utilization;
+    return typeof used === 'number' && used >= limit;
+  };
+  const tickShared = (limit) => {
+    if (!overLimit(getUsage(), limit)) { baseline.clear(); return; }
+    for (const job of runs()) stopAtTaskBoundary(job);
+  };
+  const tickPerJob = (limit) => {
+    for (const job of runs()) {
+      if (overLimit(usageOf(job), limit)) stopAtTaskBoundary(job);
+      else baseline.delete(job.id);
+    }
+  };
   const tick = () => {
     const limit = (typeof settings === 'function' ? settings() : settings).hardStopFiveHour;
-    const used = getUsage()?.five_hour?.utilization;
-    if (typeof used !== 'number' || used < limit) { baseline.clear(); return; }
-    for (const job of runs()) stopAtTaskBoundary(job);
+    return usageOf ? tickPerJob(limit) : tickShared(limit);
   };
   const timer = setInterval(tick, intervalMs);
   timer.unref();

@@ -14,8 +14,9 @@ playwright-report/
 !.env.example
 *.pem
 
-# Local Claude Code settings
+# Local Claude Code settings and installed third-party skills
 .claude/settings.local.json
+.claude/skills/
 
 # Logs, caches and coverage
 /*.log
@@ -30,3 +31,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Old-look screenshots, replaced by home-, task- and settings- shots
+docs/design/board-*.png
+docs/design/job-*.png

@@ -1,5 +1,5 @@
-import '@fontsource-variable/geist';
-import '@fontsource-variable/geist-mono';
+import '@fontsource-variable/overpass';
+import '@fontsource-variable/overpass-mono';
 import './styles.css';
 import { createRoot } from 'react-dom/client';
 import { MotionConfig } from 'motion/react';
